@@ -1,0 +1,3 @@
+[deps]
+DistCtrl4DistMan = "d3e29191-5bf9-416b-a012-0c765454517a"
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
