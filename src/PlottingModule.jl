@@ -325,7 +325,7 @@ end
     P = pressureField(aa, z0, phases, xv, yv);
 
     @series begin
-        linetype := :heatmap;
+        seriestype := :heatmap;
         xv, yv, P
     end
 
@@ -342,7 +342,7 @@ end
                 # legendfontsize := 4;
                 label := "";
                 linealpha := 0;
-                linetype := :path;
+                seriestype := :path;
 
                 markerstrokecolor := :black;
                 markerstrokewidth := 1;
