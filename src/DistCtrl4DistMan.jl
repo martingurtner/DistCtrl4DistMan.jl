@@ -13,6 +13,7 @@ include("ADMMModule.jl")
 include("PlottingModule.jl")
 
 using LinearAlgebra
+using Statistics
 using Plots
 using Printf
 
@@ -204,7 +205,7 @@ function savePlots(exp_data, params::Dict{String,Any}; f_plotControls=false, fil
         heatmap(exp_data["ActuatorArray"], params["z0"], exp_data["Controls"], agents=exp_data["Agents"], N=120, box=:grid, colorbar=false),
         size=(1000,500), layout=@layout [a b])
         annotate!([(agnt.pos[1]+exp_data["ActuatorArray"].dx/6, agnt.pos[2]+exp_data["ActuatorArray"].dx/6, text(string(round(calcPressure(exp_data["ActuatorArray"], agnt.pos, exp_data["Controls"]))), 12, :white, :left, :bottom, :bold)) for agnt in exp_data["Agents"]], subplot=2)
-        savefig(string("figs/", filename))
+        savefig(filename)
     else
         Fdev_arr = Array{NTuple{params["force_dim"], Float64}, 1}();
         for agnt in exp_data["Agents"]
@@ -219,8 +220,156 @@ function savePlots(exp_data, params::Dict{String,Any}; f_plotControls=false, fil
         end
 
         plot(exp_data["ActuatorArray"], controls=controls, agents=exp_data["Agents"], dev_forces=Fdev_arr, showReqForces=true, Fscale=params["Fscale"], legend=nothing, size=(500,500), lwidth=8, distCircles=distCircles)
-        savefig(string("figs/", filename))
+        savefig(filename)
     end
+end
+
+function run_exp(;platform=:MAG,
+    n=8,
+    N_iter=50, N_exps = 1, N_agnts = 4,
+    method = :freedir,
+    f_showplots = true,
+    f_plotControls = false,
+    f_plotNeighbtCircles = false,
+    f_saveplots = false,
+    f_errstats = false,
+    f_showconvrate_all = false,
+    f_showconvrate_ind = false,
+    f_convAnalysis = true,
+    λ = missing, ρ= missing,
+    figFileName = "test_fig.pdf",
+    display = :iter, # display = {:none, :iter, :final}
+    agent_positions = missing,
+    Fdes = missing,
+    params = Dict{String, Any}())
+
+    # Used number types
+    F = Float64;  # Doesnt work with FLoat32
+    U = UInt64;
+
+    @assert ismissing(agent_positions) || (length(agent_positions) == N_agnts) "Number of positions does not mathc number of agents"
+
+    push!(params, "platform" => platform);
+
+    if platform == :DEP
+        dx = F(100.0e-6);
+        aa = ActuatorArray(n, n, dx, dx/2, :square);
+
+        push!(params, "λ" => F(ismissing(λ) ? 1e4 : λ));
+        push!(params, "ρ" => F(ismissing(ρ) ? 1e-4 : ρ));
+
+        push!(params, "space_dim" => 3);
+        push!(params, "force_dim" => 3);
+
+        xlim = (2*aa.dx, (aa.nx-3)*aa.dx);
+        ylim = (2*aa.dx, (aa.ny-3)*aa.dx);
+        push!(params, "z0" => F(100e-6));
+
+        haskey(params, "maxDist") || push!(params, "maxDist" => (3*dx, 5.5*dx));
+
+        push!(params, "calcForce" => calcDEPForce);
+        push!(params, "Fscale" => 1e10);
+
+        minMutualDist = 2*aa.dx;   # Set the minimum mutual distance between the agents
+    elseif platform == :MAG
+        dx = F(25.0e-3);
+        aa = ActuatorArray(n, n, dx, dx, :coil);
+
+        push!(params, "λ" => F(ismissing(λ) ? 1 : λ));
+        push!(params, "ρ" => F(ismissing(ρ) ? 1 : ρ));
+
+        push!(params, "space_dim" => 2);
+        push!(params, "force_dim" => 2);
+        xlim = (aa.dx, (aa.nx-2)*aa.dx);
+        ylim = (aa.dx, (aa.ny-2)*aa.dx);
+        push!(params, "z0" => F(0));
+        haskey(params, "maxDist") || push!(params, "maxDist" => (2*dx, 3*dx));
+
+        push!(params, "Fscale" => 20);
+        push!(params, "calcForce" => calcMAGForce);
+
+        minMutualDist = 2*aa.dx;   # Set the minimum mutual distance between the agents
+    elseif platform == :ACU
+        dx = F(10.0e-3);
+        aa = ActuatorArray(n, n, dx);
+
+        push!(params, "λ" => F(ismissing(λ) ? 10000 : λ));
+        push!(params, "ρ" => F(ismissing(ρ) ? 0.0001 : ρ));
+
+        push!(params, "space_dim" => 3);
+        push!(params, "force_dim" => 1);
+        xlim = (2*aa.dx, (aa.nx-3)*aa.dx);
+        ylim = (2*aa.dx, (aa.ny-3)*aa.dx);
+
+        push!(params, "z0" => F(-65e-3));
+        haskey(params, "maxDist") || push!(params, "maxDist" => (3.5*dx, 10*dx));
+        push!(params, "calcForce" => calcPressure);
+
+        push!(params, "Pdes" => F(1500));
+
+        minMutualDist = 3.5*aa.dx;   # Set the minimum mutual distance between the agents
+    end
+
+    t_elapsed = Array{F}(undef, N_exps);
+
+    exp_data = Any[];
+
+    for i in 1:N_exps
+        display==:iter && @printf("------ %s - %s - Experiment #%d, λ: %f, ρ: %f ------\n", platform, method, i, params["λ"], params["ρ"])
+
+        # Initialize the controls to NaN
+        controls = fill(F(NaN), aa.nx, aa.ny);
+
+        # Randomly generate agent positions if they are not provided
+        if ismissing(agent_positions)
+            agnts_pos = genRandomPositions( N_agnts, params, xlim, ylim, minMutualDist);
+        else
+            agnts_pos = agent_positions;
+        end
+
+        # Initialize the agents
+        agents = initAgents(aa, agnts_pos, params, Fdes = Fdes);
+
+        exp_data_i = Dict{String, Any}("Agents" => agents, "ActuatorArray" => aa, "Platform" => platform, "params" => params);
+        f_convAnalysis && push!(exp_data, exp_data_i);
+        f_convAnalysis && push!(exp_data_i, "conv_data" => ConvAnalysis_Data());
+
+        t_elapsed[i] = @elapsed begin
+            resolveNeighbrRelations!(agents);
+
+            hist = admm(agents,
+                λ = params["λ"], ρ = params["ρ"],
+                log = f_convAnalysis,
+                maxiter = N_iter,
+                method = method);
+
+            # Average the controls over the agents
+            controls = collapseControls(agents, aa);
+        end
+
+        f_convAnalysis && push!(exp_data_i, "conv_data" => hist);
+        (f_convAnalysis || f_showplots || f_saveplots) && push!(exp_data_i, "Controls" => controls);
+        f_errstats && print_err_stats(exp_data_i, params);
+        f_showplots && showPlots(exp_data_i, params, f_convAnalysis && f_showconvrate_ind, f_plotControls=f_plotControls, f_showCircles=f_plotNeighbtCircles);
+        f_saveplots && savePlots(exp_data_i, params, f_plotControls=f_plotControls, filename=figFileName, f_showCircles=f_plotNeighbtCircles);
+
+        display==:iter && @printf("Time elapsed: %3.2f ms.\n", 1e3*t_elapsed[i])
+        # Run the Garbage Collector
+        # @time GC.gc();
+    end
+
+    (display==:iter || display==:final) && @printf("%s - %s - λ: %f, ρ: %f - Time elapsed - mean: %3.2f ms, meadian: %3.2f ms.\n", platform, method, params["λ"], params["ρ"], 1e3*mean(t_elapsed), 1e3*median(t_elapsed));
+
+    if f_showconvrate_all && f_convAnalysis
+        Plots.display(plot([conv_measure(exp_datak["conv_data"]) for exp_datak in exp_data], legend=nothing, linecolor=:red, linealpha=0.3,
+        leg=false, size=(700,200), yscale=:log10, xlabel="Iteration", ylabel="Convergence measure"))
+
+        Plots.display(plot!( mean([conv_measure(exp_datak["conv_data"]) for exp_datak in exp_data]), legend=nothing, linecolor=:blue, linewidth=3))
+
+        savefig("TestConv_all.pdf")
+    end
+
+    f_convAnalysis ? (params, exp_data) : (params);
 end
 
 end
