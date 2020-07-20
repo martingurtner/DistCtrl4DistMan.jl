@@ -8,10 +8,14 @@ module DistCtrl4DistMan
 include("LinSolvers.jl")
 include("ActuatorArrayModule.jl")
 include("ObjectAgentModule.jl")
+include("ConvAnalysisModule.jl")
+include("ADMMModule.jl")
+
 
 using .LinSolvers
 using .ActuatorArrayModule
 using .ObjectAgentModule
+using .ADMMModule
 
 # Write your package code here.
 

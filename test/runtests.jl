@@ -243,3 +243,45 @@ end
     end
 
 end
+
+@testset "Test - ADMM" begin
+    F = Float64;
+    U = UInt64;
+
+    n = U(8);
+    dx = F(25e-3);
+    aa = DistCtrl4DistMan.ActuatorArray(n, n, dx, dx, :coil);
+
+    # Set the maximum distance so that both agents use all the coils
+    maxdist = n*dx;
+
+    for i in 1:20
+        # Generate random positions of the agents
+        ball_pos1 = ( dx*(n-1)*rand(),  dx*(n-1)*rand());
+        ball_pos2 = ( dx*(n-1)*rand(),  dx*(n-1)*rand());
+
+        # Generate the desired forces so that one can actually generate them
+        random_ctrls = rand(F, n, n);
+        F_des1 = DistCtrl4DistMan.calcMAGForce(aa, ball_pos1, random_ctrls)
+        F_des2 = DistCtrl4DistMan.calcMAGForce(aa, ball_pos2, random_ctrls)
+
+        # Initialize the agents
+        aL1, a_used1 = DistCtrl4DistMan.genActList(aa, (ball_pos1[1], ball_pos1[2], F(0)), maxdist, maxdist);
+        aL2, a_used2 = DistCtrl4DistMan.genActList(aa, (ball_pos2[1], ball_pos2[2], F(0)), maxdist, maxdist);
+        oa1 = DistCtrl4DistMan.ObjectAgent_MAG("Agent 1", ball_pos1, F_des1, aa, aL1, a_used1, F(1));
+        oa2 = DistCtrl4DistMan.ObjectAgent_MAG("Agent 2", ball_pos2, F_des2, aa, aL2, a_used2, F(1));
+
+        agents = [oa1, oa2];
+        DistCtrl4DistMan.admm(agents,
+            λ = 1.0, ρ = 1.0,
+            log = false,
+            maxiter = 1000,
+            method = :freedir);
+
+        F_dev1 = tuple((oa1.Gxy'*oa1.zk*oa1.Fdes_sc)...)
+        F_dev2 = tuple((oa2.Gxy'*oa2.zk*oa2.Fdes_sc)...)
+
+        @test all(isapprox.(F_dev1, F_des1, atol=1e-4))
+        @test all(isapprox.(F_dev2, F_des2, atol=1e-4))
+    end
+end
