@@ -2,8 +2,140 @@ using DistCtrl4DistMan
 using LinearAlgebra
 using Test
 
-@testset "DistCtrl4DistMan.jl" begin
+# @testset "DistCtrl4DistMan.jl" begin
+# end
 
+@testset "ObjectAgentModule.jl" begin
+    include("test_data.jl")
+
+    @testset "Test - MAG" begin# Used types
+        F = Float64;
+        U = UInt64;
+
+        # Load test data
+        Gxy_ref, MAG_test_currents, MAG_fi_ref, MAG_F_ref = test_data_MAG();
+
+        n = U(8);
+        dx = F(25e-3);
+        aa = DistCtrl4DistMan.ActuatorArray(n, n, dx, dx, :coil);
+        ball_pos = ( (n-1)*dx/2 - dx/2, (n-1)*dx/2 + 1.3*dx );
+
+        # calcMAGForce() and fi() test values
+        fi_test = DistCtrl4DistMan.ObjectAgentModule.mag_fi(MAG_test_currents);
+        F_MAG = DistCtrl4DistMan.calcMAGForce(aa, ball_pos, fi_test);
+
+        aL, a_used = DistCtrl4DistMan.genActList(aa, (ball_pos[1], ball_pos[2], F(0)), F(2.5*dx), F(3.5*dx));
+        oa_mag = DistCtrl4DistMan.ObjectAgent_MAG("Agent_MAG", ball_pos, F_MAG, aa, aL, a_used, F(1));
+
+        @testset "Test the function generating the Gxy matrix" begin
+            @test DistCtrl4DistMan.ObjectAgentModule.genGxy(aa, ball_pos) ≈ Gxy_ref
+        end
+        @testset "Test the function fi()" begin
+            @test fi_test ≈ MAG_fi_ref
+        end
+        @testset "Test the function calcMagForce()" begin
+            @test all(F_MAG .≈ MAG_F_ref)
+        end
+    end
+
+    @testset "Test - DEP" begin
+        # Used types
+        F = Float64;
+        U = UInt64;
+
+        # Load test data
+        Gamma_ref, Lambda_x, Lambda_y, Lambda_z, DEP_test_phases, DEP_F_ref = test_data_DEP();
+        n = U(5);
+        dx = F(100e-6);
+        aa = DistCtrl4DistMan.ActuatorArray(n, n, dx, dx/2, :square);
+        center_pos = ( (n-1)*dx/2, (n-1)*dx/2, F(100e-6));
+
+        F_DEP = DistCtrl4DistMan.calcDEPForce(aa, center_pos, DEP_test_phases);
+        aL, a_used = DistCtrl4DistMan.genActList(aa, center_pos, F(350e-6), F(350e-6));
+        oa_dep = DistCtrl4DistMan.ObjectAgent_DEP("Agent1", center_pos, F_DEP, aa, aL, a_used);
+
+        @testset "Test the function generating the Gamma and Lambda_a marices" begin
+            Gamma_test, Lambda_a = DistCtrl4DistMan.ObjectAgentModule.genC_DEP(aa, center_pos);
+            @test Gamma_ref ≈ Gamma_test
+            @test Lambda_a[1] ≈ Lambda_x
+            @test Lambda_a[2] ≈ Lambda_y
+            @test Lambda_a[3] ≈ Lambda_z
+        end
+        @testset "Test the function calculating the DEP force" begin
+            @test all(F_DEP .≈ DEP_F_ref)
+        end
+        @testset "Test the cost function" begin # The cost function (oa_dep,fvk) should be zero since we set oa_dep.vk_r and oa_dep.vk_i to values which should result in the desired force
+            # Calculate the cost function (oa_dep.fvk)
+            oa_dep.vk_r = cos.(DEP_test_phases'[:]);
+            oa_dep.vk_i = sin.(DEP_test_phases'[:]);
+            DistCtrl4DistMan.costFun!(oa_dep);
+
+            @test all( abs.(oa_dep.fvk) .< [1,1,1].*1e-6 )
+        end
+    end
+
+    @testset "Test - ACU" begin
+        # Used types
+        F = Float64;
+        U = UInt64;
+
+        # Load test data
+        C1ref, C2ref, th1, th2, objVal1_ref, objVal2_ref, D1ref, D2ref, phases_test, p1_ref, p2_ref = test_data_ACU();
+
+        n = U(8);
+        dx = F(10.0e-3);
+        aa = DistCtrl4DistMan.ActuatorArray(n, n, dx);
+
+        # two agents at positions close to the center
+        z0 = F(-50e-3);
+        maxDist1 = 3*dx; #2
+        maxDist2 = 3*dx; #3
+        oa1_pos = ((n-1)*aa.dx/2-dx, (n-1)*aa.dx/2, z0);
+        oa2_pos = ((n-1)*aa.dx/2+dx, (n-1)*aa.dx/2+1.6f0*dx, z0);
+        Pdes = F(1000); # desired presure (same for both agents)
+
+        # Generate list of used actuators for each object agent
+        aL1, a_used1 = DistCtrl4DistMan.genActList(aa, oa1_pos, maxDist1, maxDist2);
+        aL2, a_used2 = DistCtrl4DistMan.genActList(aa, oa2_pos, maxDist1, maxDist2);
+
+        oa1 = DistCtrl4DistMan.ObjectAgent_ACU("Agent1", oa1_pos, Pdes, aa, aL1, a_used1);
+        oa2 = DistCtrl4DistMan.ObjectAgent_ACU("Agent2", oa2_pos, Pdes, aa, aL2, a_used2);
+
+        @testset "Test the function generating the C matrix" begin
+            @test isapprox(oa1.zvec*oa1.zvec' + 1im*oa1.zvec*[0 1; -1 0]*oa1.zvec', C1ref, atol=1e-6)
+            @test isapprox(oa2.zvec*oa2.zvec' + 1im*oa2.zvec*[0 1; -1 0]*oa2.zvec', C2ref, atol=1e-6)
+        end
+        @testset "Test the cost function" begin
+            oa1.vk_r = cos.(th1);
+            oa1.vk_i = sin.(th1);
+            oa2.vk_r = cos.(th2);
+            oa2.vk_i = sin.(th2);
+
+            # Compute the values of the cost function (oa.fvk)
+            DistCtrl4DistMan.costFun!(oa1)
+            DistCtrl4DistMan.costFun!(oa2)
+
+            @test isapprox(oa1.fvk[1],  objVal1_ref, atol=1e-5)
+            @test isapprox(oa2.fvk[1],  objVal2_ref, atol=1e-5)
+        end
+        @testset "Test the cost function calculating the jacobian" begin
+            # Compute the jacobians
+            DistCtrl4DistMan.ObjectAgentModule.jac!(oa1);
+            DistCtrl4DistMan.ObjectAgentModule.jac!(oa2);
+
+            @test isapprox(oa1.J,  D1ref', atol=1e-6)
+            @test isapprox(oa2.J,  D2ref', atol=1e-6)
+        end
+        @testset "Test the function calculating the pressure" begin
+            @test isapprox(DistCtrl4DistMan.calcPressure(aa, oa1_pos, convert.(F, phases_test)), F(p1_ref), atol=1e-4)
+            @test isapprox(DistCtrl4DistMan.calcPressure(aa, oa2_pos, convert.(F, phases_test)), F(p2_ref), atol=1e-4)
+        end
+        @testset "Test the function finding the shared actuators among agents (function from ActuatorArray module)" begin
+            DistCtrl4DistMan.resolveNeighbrRelations!([oa1, oa2])
+            @test oa1.actList[oa1.neighbors[1][2]] == oa2.actList[oa1.neighbors[1][3]]
+            @test oa2.actList[oa2.neighbors[1][2]] == oa1.actList[oa2.neighbors[1][3]]
+        end
+    end
 end
 
 @testset "ActuatorArray tests" begin

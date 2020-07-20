@@ -1,3 +1,8 @@
+"""
+LinSolvers (C) 2020, Martin Gurtner
+Solvers of linear systems of equations tailored to the needs of
+DistCtrl4DistMan.jl package
+"""
 module LinSolvers
 
 using LinearAlgebra
