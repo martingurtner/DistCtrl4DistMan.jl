@@ -136,12 +136,12 @@ function initAgents(aa::ActuatorArray{T, U}, oa_pos::Union{Array{Tuple{T,T},1}, 
 end
 
 """
-    averageActuatorsCommands(agents, aa)
+    averageActuatorCommands(agents, aa)
 
 Averages the required actuators commands from individual agents in the `agents`
 array and returns actuator commands that can be applied to the actuator array.
 """
-function averageActuatorsCommands(agents, aa)
+function averageActuatorCommands(agents, aa)
     ActuatorCommands = fill(NaN, aa.nx, aa.ny);
     actuatorIsUsedByN = zeros(size(ActuatorCommands))
     for agent in agents
@@ -302,6 +302,39 @@ function savePlots(exp_data, params::Dict{String,Any}; plotActuatorCommands=fals
     nothing
 end
 
+const DEP_params = Dict{String, Any}("platform" => :DEP,
+    "dx" => 100.0e-6,
+    "λ" => 1.0e4,
+    "ρ" => 1.0e-4,
+    "space_dim" => 3,
+    "force_dim" => 3,
+    "z0" => 100e-6,
+    "maxDist" => (300e-6, 550e-6),
+    "calcForce" => calcDEPForce,
+    "Fscale" => 1e10);
+
+const MAG_params = Dict{String, Any}("platform" => :MAG,
+    "dx" => 25.0e-3,
+    "λ" => 1.3,
+    "ρ" => 1.5,
+    "space_dim" => 2,
+    "force_dim" => 2,
+    "z0" => 0,
+    "maxDist" => (50e-3, 75e-3),
+    "calcForce" => calcMAGForce,
+    "Fscale" => 20);
+
+const ACU_params = Dict{String, Any}("platform" => :ACU,
+    "dx" => 10.0e-3,
+    "λ" => 1.0e4,
+    "ρ" => 1.0e-4,
+    "space_dim" => 3,
+    "force_dim" => 1,
+    "z0" => -65e-3,
+    "maxDist" => (35e-3, 100e-3),
+    "calcForce" => calcPressure,
+    "Pdes" => 1500.0);
+
 """
     runExp(<keyword arguments>)
 
@@ -322,8 +355,6 @@ Run a numerical experiment testing the distributed optimization solver.
 - `plotConvergenceRates::Bool=false`: plot the global convergence measures of all experiments in one figure
 - `plotConvergenceRatesIndividual::Bool=false`: plot the convergence measures for each experiment. `convanalysis` must be true for this to be working.
 - `convanalysis::Bool=false`: if `true`, data from all iterations form all experiments are stored in `exps_data` array which is returned by `runExp()` function
-- `λ::Real`: `λ` parameter used in the solver
-- `ρ::Real`: `ρ` parameter used in the solver
 - `figfilename::String="test_fig.pdf"`: the file name of the saved plot
 - `display::Symbol=:iter`: ∈{:none, :iter, :final}
 - `agent_positions::Union{Array{Tuple{Float64,Float64},1}, Array{Tuple{Float64,Float64,Float64},1}}=missing`: array of positions of the agents. If `missing`, the positions are generated randomly.
@@ -347,7 +378,6 @@ function runExp(;platform=:MAG,
     plotConvergenceRates = false,
     plotConvergenceRatesIndividual = false,
     convanalysis = true,
-    λ = missing, ρ= missing,
     figfilename = "test_fig.pdf",
     display = :iter, # display = {:none, :iter, :final}
     agent_positions = missing,
@@ -358,65 +388,33 @@ function runExp(;platform=:MAG,
     F = Float64;  # Doesnt work with FLoat32
     U = UInt64;
 
-    @assert ismissing(agent_positions) || (length(agent_positions) == N_agnts) "Number of positions does not mathc number of agents"
-
-    push!(params, "platform" => platform);
+    @assert ismissing(agent_positions) || (length(agent_positions) == N_agnts) "Number of positions does not match the number of agents"
 
     if platform == :DEP
-        dx = F(100.0e-6);
-        aa = ActuatorArray(N_acts, N_acts, dx, dx/2, :square);
+        params = merge(DEP_params, params);
 
-        push!(params, "λ" => F(ismissing(λ) ? 1e4 : λ));
-        push!(params, "ρ" => F(ismissing(ρ) ? 1e-4 : ρ));
-
-        push!(params, "space_dim" => 3);
-        push!(params, "force_dim" => 3);
+        aa = ActuatorArray(N_acts, N_acts, params["dx"], params["dx"]/2, :square);
 
         xlim = (2*aa.dx, (aa.nx-3)*aa.dx);
         ylim = (2*aa.dx, (aa.ny-3)*aa.dx);
-        push!(params, "z0" => F(100e-6));
-
-        haskey(params, "maxDist") || push!(params, "maxDist" => (3*dx, 5.5*dx));
-
-        push!(params, "calcForce" => calcDEPForce);
-        push!(params, "Fscale" => 1e10);
 
         minMutualDist = 2*aa.dx;   # Set the minimum mutual distance between the agents
     elseif platform == :MAG
-        dx = F(25.0e-3);
-        aa = ActuatorArray(N_acts, N_acts, dx, dx, :coil);
+        params = merge(MAG_params, params);
 
-        push!(params, "λ" => F(ismissing(λ) ? 1 : λ));
-        push!(params, "ρ" => F(ismissing(ρ) ? 1 : ρ));
+        aa = ActuatorArray(N_acts, N_acts, params["dx"], params["dx"], :coil);
 
-        push!(params, "space_dim" => 2);
-        push!(params, "force_dim" => 2);
         xlim = (aa.dx, (aa.nx-2)*aa.dx);
         ylim = (aa.dx, (aa.ny-2)*aa.dx);
-        push!(params, "z0" => F(0));
-        haskey(params, "maxDist") || push!(params, "maxDist" => (2*dx, 3*dx));
-
-        push!(params, "Fscale" => 20);
-        push!(params, "calcForce" => calcMAGForce);
 
         minMutualDist = 2*aa.dx;   # Set the minimum mutual distance between the agents
     elseif platform == :ACU
-        dx = F(10.0e-3);
-        aa = ActuatorArray(N_acts, N_acts, dx);
+        params = merge(ACU_params, params);
 
-        push!(params, "λ" => F(ismissing(λ) ? 10000 : λ));
-        push!(params, "ρ" => F(ismissing(ρ) ? 0.0001 : ρ));
+        aa = ActuatorArray(N_acts, N_acts, params["dx"]);
 
-        push!(params, "space_dim" => 3);
-        push!(params, "force_dim" => 1);
         xlim = (2*aa.dx, (aa.nx-3)*aa.dx);
         ylim = (2*aa.dx, (aa.ny-3)*aa.dx);
-
-        push!(params, "z0" => F(-65e-3));
-        haskey(params, "maxDist") || push!(params, "maxDist" => (3.5*dx, 10*dx));
-        push!(params, "calcForce" => calcPressure);
-
-        push!(params, "Pdes" => F(1500));
 
         minMutualDist = 3.5*aa.dx;   # Set the minimum mutual distance between the agents
     end
@@ -455,7 +453,7 @@ function runExp(;platform=:MAG,
                 method = method);
 
             # Average the actuator commands over the agents
-            actuatorCommands = averageActuatorsCommands(agents, aa);
+            actuatorCommands = averageActuatorCommands(agents, aa);
         end
 
         convanalysis && push!(exps_data_i, "conv_data" => hist);

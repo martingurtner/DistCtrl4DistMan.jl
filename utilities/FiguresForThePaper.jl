@@ -1,9 +1,9 @@
 using DistCtrl4DistMan: runExp
 using Plots
 
-DEP_params = Dict{String,Any}("maxDist" => (300e-6, 550e-6), "λ" => 1e4, "ρ" => 1e-4);
-MAG_params = Dict{String,Any}("maxDist" => (50e-3, 75e-3),   "λ" => 1.3, "ρ" => 1.5);
-ACU_params = Dict{String,Any}("maxDist" => (45e-3, 65e-3), "λ" => 1e4, "ρ" => 1e-4);
+DEP_params = Dict{String,Any}("maxDist" => (300e-6, 550e-6));
+MAG_params = Dict{String,Any}("maxDist" => (50e-3, 75e-3));
+ACU_params = Dict{String,Any}("maxDist" => (45e-3, 65e-3));
 
 ## DEP - two microparticles, 16x16 array of electrodes
 runExp(platform=:DEP, N_iter=25, N_agnts=2, N_acts=16, convanalysis=false, saveplots=true, figfilename="DEParray_small.pdf", params=DEP_params);
