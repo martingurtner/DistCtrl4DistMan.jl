@@ -2,7 +2,6 @@
 DistCtrl4DistMan (C) 2020, Martin Gurtner
 Numerical experiments for a paper on distributed optimization for distributed manipulation.
 """
-
 module DistCtrl4DistMan
 
 include("LinSolvers.jl")
@@ -24,6 +23,24 @@ using .ADMMModule
 using .ConvAnalysisModule
 using .PlottingModule
 
+"""
+    genRandomPositions(N, params, xlim, ylim, minMutualDist)
+
+Generates random positions for `N` agents. The random positions respect the
+limits specified by tuples `xlim` and 'ylim'. The dictionary `params` must
+contain a key "space_dim" containing a number 2 or 3 depending on whether the
+positions are to be generated in 2D or 3D. If in 3D, the third positional
+coordinate is copied from `params["z0"]`.
+
+# Examples
+```julia-repl
+julia> genRandomPositions(3, Dict{String, Any}("space_dim" => 2), (-1,1), (-1,1), 0.1)
+3-element Array{Tuple{Float64,Float64},1}:
+ (0.1794808388697966, -0.12069979900680572)
+ (0.21384769250194813, 0.33873868561424914)
+ (0.608968185187885, -0.03527899822165992)
+```
+"""
 function genRandomPositions(N, params, xlim, ylim, minMutualDist)
     @assert (params["space_dim"] == 2 || params["space_dim"] == 3) "Unsupported dimension."
 
@@ -65,17 +82,26 @@ function genRandomPositions(N, params, xlim, ylim, minMutualDist)
     oa_pos;
 end
 
+"""
+    initAgents(aa, oa_pos, params[, Fdes])
+
+Returns an array of agents located at positions given by in `oa_pos`. Each agents
+is initialized with a list of actuators it considers in the force model and with
+a list of actuators it optimizes over. These lists are created based on agent's
+position and values in `params["maxDist"]``. If `Fdes` argument is missing, the
+desired force is generated randomly.
+"""
 function initAgents(aa::ActuatorArray{T, U}, oa_pos::Union{Array{Tuple{T,T},1}, Array{Tuple{T,T,T}, 1}}, params::Dict{String,Any}; Fdes = missing) where {T<:Real, U<:Unsigned}
     N = size(oa_pos)[1];
 
     if params["platform"] == :DEP
         agents = Array{ObjectAgent_DEP{T, U}, 1}();
-        rand_controls = 2*π*rand(T, aa.nx, aa.ny);
+        randActuatorCommands = 2*π*rand(T, aa.nx, aa.ny);
         for k in 1:N
             # Generate list of used actuators for each object agent
             aL, a_used = genActList(aa, oa_pos[k], params["maxDist"][1], params["maxDist"][2]);
             if ismissing(Fdes)
-                Fdes_i = calcDEPForce(aa, oa_pos[k], rand_controls).*(1/2,1/2,1/2);
+                Fdes_i = calcDEPForce(aa, oa_pos[k], randActuatorCommands).*(1/2,1/2,1/2);
             else
                 Fdes_i = Fdes[k];
             end
@@ -83,12 +109,12 @@ function initAgents(aa::ActuatorArray{T, U}, oa_pos::Union{Array{Tuple{T,T},1}, 
         end
     elseif params["platform"] == :MAG
         agents = Array{ObjectAgent_MAG{T, U}, 1}();
-        rand_controls = rand(T, aa.nx, aa.ny);
+        randActuatorCommands = rand(T, aa.nx, aa.ny);
         for k in 1:N
             # Generate list of used actuators for each object agent
             aL, a_used = genActList(aa, (oa_pos[k][1], oa_pos[k][2], T(0)), params["maxDist"][1], params["maxDist"][2]);
             if ismissing(Fdes)
-                Fdes_i = calcMAGForce(aa, oa_pos[k], rand_controls)./2;
+                Fdes_i = calcMAGForce(aa, oa_pos[k], randActuatorCommands)./2;
             else
                 Fdes_i = Fdes[k];
             end
@@ -109,35 +135,47 @@ function initAgents(aa::ActuatorArray{T, U}, oa_pos::Union{Array{Tuple{T,T},1}, 
     return agents;
 end
 
-function collapseControls(agents, aa)
-    # Averages the controls over the agents
+"""
+    averageActuatorsCommands(agents, aa)
 
-    controls = fill(NaN, aa.nx, aa.ny);
-    actuatorIsUsedByN = zeros(size(controls))
+Averages the required actuators commands from individual agents in the `agents`
+array and returns actuator commands that can be applied to the actuator array.
+"""
+function averageActuatorsCommands(agents, aa)
+    ActuatorCommands = fill(NaN, aa.nx, aa.ny);
+    actuatorIsUsedByN = zeros(size(ActuatorCommands))
     for agent in agents
         for (k, (i, j)) in enumerate(agent.actList)
             actuatorIsUsedByN[i,j] += 1;
-            if isnan(controls[i,j])
-                controls[i,j] = agent.zk[k];
+            if isnan(ActuatorCommands[i,j])
+                ActuatorCommands[i,j] = agent.zk[k];
             else
-                controls[i,j] += 1/actuatorIsUsedByN[i,j] * (agent.zk[k] - controls[i,j]);
+                ActuatorCommands[i,j] += 1/actuatorIsUsedByN[i,j] * (agent.zk[k] - ActuatorCommands[i,j]);
             end
         end
     end
 
-    return controls;
+    return ActuatorCommands;
 end
 
-function print_err_stats(exp_data, params)
-        # Print some output saying how good is the result of the distributed optimization
+"""
+    printErrStats(exp_data, params)
+
+Print some error statistics saying how good is the result of the distributed
+optimization.
+"""
+function printErrStats(exp_data, params)
         println("Req.  \t\t\t | Dev.")
+
+        printf(fmt::String,args...) = @eval @printf($fmt,$(args...));
+
         for (k, agnt) in enumerate(exp_data["Agents"])
             if exp_data["Platform"] == :ACU
-                printf("%4.1f \t\t\t%4.1f\n", agnt.Pdes, params["calcForce"](exp_data["ActuatorArray"], agnt.pos, exp_data["Controls"]))
+                printf("%4.1f \t\t\t%4.1f\n", agnt.Pdes, params["calcForce"](exp_data["ActuatorArray"], agnt.pos, exp_data["ActuatorCommands"]))
             else
                 force_dim = length(agnt.Fdes);
                 if force_dim > 1
-                    Fdev = params["calcForce"](exp_data["ActuatorArray"], agnt.pos, exp_data["Controls"]) ./ agnt.Fdes_sc;
+                    Fdev = params["calcForce"](exp_data["ActuatorArray"], agnt.pos, exp_data["ActuatorCommands"]) ./ agnt.Fdes_sc;
                     printf("[" * "% 1.3f, "^(force_dim-1) *"% 1.3f]\t [" * "% 1.3f, "^(force_dim-1) *"% 1.3f]\n", agnt.Fdes..., Fdev...)
                 else
                     error("Unsupported platform")
@@ -148,11 +186,30 @@ function print_err_stats(exp_data, params)
         println("\nFinal-itreation error")
         # println([exp_data["conv_data"][end][i].cost for i in 1:size(exp_data)[3]])
         println([agent.cost for agent in exp_data["conv_data"][end]])
+
+        nothing
 end
 
+"""
+    showPlots(exp_data, params; <keyword arguments>)
 
-function showPlots(exp_data, params::Dict{String,Any}, f_convAnalysis; f_plotControls=false, f_showCircles=false)
-    if f_showCircles
+Visualize the results of the optimization: agents on the actuator array together
+with the desired and developed forces.
+
+# Arguments
+- `plotConvAnalysis::Bool=false`: make also plots with values of the cost function
+of individual agents and the global convergence measure.
+- `plotActuatorCommands::Bool=false`: plot also values of the actuator commands.
+- `showCircles::Bool=false`: plot circles encircling the used actuators.
+
+# Examples
+```julia-repl
+julia> params, exps_data = run_exp();
+julia> showPlots(exps_data[1], params, plotConvAnalysis=true);
+```
+"""
+function showPlots(exp_data, params::Dict{String,Any}; plotConvAnalysis=false, plotActuatorCommands=false, showCircles=false)
+    if showCircles
         distCircles = params["maxDist"];
     else
         distCircles = missing;
@@ -160,41 +217,60 @@ function showPlots(exp_data, params::Dict{String,Any}, f_convAnalysis; f_plotCon
 
     ## Plot the actuator array together with the objects
     if exp_data["Platform"] == :ACU
-        if !f_convAnalysis
+        if !plotConvAnalysis
             Plots.display(plot(plot(exp_data["ActuatorArray"], agents=exp_data["Agents"], legend=nothing, distCircles=distCircles),
-            heatmap(exp_data["ActuatorArray"], params["z0"], exp_data["Controls"], agents=exp_data["Agents"], N=100, box=:grid, colorbar=false),
-            layout=@layout [a b]))
+            heatmap(exp_data["ActuatorArray"], params["z0"], exp_data["ActuatorCommands"], agents=exp_data["Agents"], N=100, box=:grid, colorbar=false),
+            layout=@layout [a b]));
         else
             Plots.display(plot(plot(exp_data["ActuatorArray"], agents=exp_data["Agents"], legend=nothing, distCircles=distCircles),
-            heatmap(exp_data["ActuatorArray"], params["z0"], exp_data["Controls"], agents=exp_data["Agents"], N=100, box=:grid, colorbar=false),
+            heatmap(exp_data["ActuatorArray"], params["z0"], exp_data["ActuatorCommands"], agents=exp_data["Agents"], N=100, box=:grid, colorbar=false),
             plot(errf(exp_data["conv_data"]), leg=false, yticks=0:0.5:1, border=:origin, title="Error convergence", titlefontsize=8),
-            plot(conv_measure(exp_data["conv_data"]), leg=false, title="Error convergence", titlefontsize=8, yscale=:log10), size=(500,500), layout=@layout [[a b]; c{0.1h}; d{0.1h}]))
+            plot(conv_measure(exp_data["conv_data"]), leg=false, title="Error convergence", titlefontsize=8, yscale=:log10), size=(500,500), layout=@layout [[a b]; c{0.1h}; d{0.1h}]));
         end
     else
         Fdev_arr = Array{NTuple{params["force_dim"], Float64}, 1}();
         for agnt in exp_data["Agents"]
-            Fdev = params["calcForce"](exp_data["ActuatorArray"], agnt.pos, exp_data["Controls"]);
+            Fdev = params["calcForce"](exp_data["ActuatorArray"], agnt.pos, exp_data["ActuatorCommands"]);
             push!(Fdev_arr, Fdev);
         end
 
-        if f_plotControls
-            controls = exp_data["Controls"];
+        if plotActuatorCommands
+            actuatorCommands = exp_data["ActuatorCommands"];
         else
-            controls = fill(NaN, exp_data["ActuatorArray"].nx, exp_data["ActuatorArray"].ny);
+            actuatorCommands = fill(NaN, exp_data["ActuatorArray"].nx, exp_data["ActuatorArray"].ny);
         end
 
-        if !f_convAnalysis
-            Plots.display(plot(exp_data["ActuatorArray"], controls = controls, agents=exp_data["Agents"], dev_forces=Fdev_arr, showReqForces=true, Fscale=params["Fscale"], legend=nothing, size=(500,500), distCircles=distCircles))
+        if !plotConvAnalysis
+            Plots.display(plot(exp_data["ActuatorArray"], actuatorCommands = actuatorCommands, agents=exp_data["Agents"], dev_forces=Fdev_arr, showReqForces=true, Fscale=params["Fscale"], legend=nothing, size=(500,500), distCircles=distCircles));
         else
-            Plots.display(plot(plot(exp_data["ActuatorArray"], controls = controls, agents=exp_data["Agents"], dev_forces=Fdev_arr, showReqForces=true, Fscale=params["Fscale"], legend=nothing, distCircles=distCircles),
+            Plots.display(plot(plot(exp_data["ActuatorArray"], actuatorCommands = actuatorCommands, agents=exp_data["Agents"], dev_forces=Fdev_arr, showReqForces=true, Fscale=params["Fscale"], legend=nothing, distCircles=distCircles),
             plot(errf(exp_data["conv_data"]), leg=false, yticks=0:0.5:1, border=:origin, title="Error convergence", titlefontsize=8),
-            plot(conv_measure(exp_data["conv_data"]), leg=false, title="Error convergence", titlefontsize=8, yscale=:log10),  size=(500,600), layout=@layout [a; b{0.1h};c{0.1h}]))
+            plot(conv_measure(exp_data["conv_data"]), leg=false, title="Error convergence", titlefontsize=8, yscale=:log10),  size=(500,600), layout=@layout [a; b{0.1h};c{0.1h}]));
         end
     end
+
+    nothing
 end
 
-function savePlots(exp_data, params::Dict{String,Any}; f_plotControls=false, filename="TestArray.pdf", f_showCircles=false)
-    if f_showCircles
+"""
+    savePlots(exp_data, params; <keyword arguments>)
+
+Save figure visualizing the results of the optimization: agents on the actuator
+array together with the desired and developed forces.
+
+# Arguments
+- `plotActuatorCommands::Bool=false`: plot also values of the actuator commands.
+- `filename::String="TestArray.pdf"`: filename of the saved figure
+- `showCircles::Bool=false`: plot circles encircling the used actuators.
+
+# Examples
+```julia-repl
+julia> params, exps_data = run_exp();
+julia> savePlots(exps_data[1], params, plotConvAnalysis=true);
+```
+"""
+function savePlots(exp_data, params::Dict{String,Any}; plotActuatorCommands=false, filename="TestArray.pdf", showCircles=false)
+    if showCircles
         distCircles = params["maxDist"];
     else
         distCircles = missing;
@@ -202,42 +278,77 @@ function savePlots(exp_data, params::Dict{String,Any}; f_plotControls=false, fil
 
     if exp_data["Platform"] == :ACU
         plot(plot(exp_data["ActuatorArray"], agents=exp_data["Agents"], legend=nothing, distCircles=distCircles),
-        heatmap(exp_data["ActuatorArray"], params["z0"], exp_data["Controls"], agents=exp_data["Agents"], N=120, box=:grid, colorbar=false),
-        size=(1000,500), layout=@layout [a b])
-        annotate!([(agnt.pos[1]+exp_data["ActuatorArray"].dx/6, agnt.pos[2]+exp_data["ActuatorArray"].dx/6, text(string(round(calcPressure(exp_data["ActuatorArray"], agnt.pos, exp_data["Controls"]))), 12, :white, :left, :bottom, :bold)) for agnt in exp_data["Agents"]], subplot=2)
-        savefig(filename)
+        heatmap(exp_data["ActuatorArray"], params["z0"], exp_data["ActuatorCommands"], agents=exp_data["Agents"], N=120, box=:grid, colorbar=false),
+        size=(1000,500), layout=@layout [a b]);
+        annotate!([(agnt.pos[1]+exp_data["ActuatorArray"].dx/6, agnt.pos[2]+exp_data["ActuatorArray"].dx/6, text(string(round(calcPressure(exp_data["ActuatorArray"], agnt.pos, exp_data["ActuatorCommands"]))), 12, :white, :left, :bottom, :bold)) for agnt in exp_data["Agents"]], subplot=2);
+        savefig(filename);
     else
         Fdev_arr = Array{NTuple{params["force_dim"], Float64}, 1}();
         for agnt in exp_data["Agents"]
-            Fdev = params["calcForce"](exp_data["ActuatorArray"], agnt.pos, exp_data["Controls"]);
+            Fdev = params["calcForce"](exp_data["ActuatorArray"], agnt.pos, exp_data["ActuatorCommands"]);
             push!(Fdev_arr, Fdev);
         end
 
-        if f_plotControls
-            controls = exp_data["Controls"];
+        if plotActuatorCommands
+            actuatorCommands = exp_data["ActuatorCommands"];
         else
-            controls = fill(NaN, exp_data["ActuatorArray"].nx, exp_data["ActuatorArray"].ny);
+            actuatorCommands = fill(NaN, exp_data["ActuatorArray"].nx, exp_data["ActuatorArray"].ny);
         end
 
-        plot(exp_data["ActuatorArray"], controls=controls, agents=exp_data["Agents"], dev_forces=Fdev_arr, showReqForces=true, Fscale=params["Fscale"], legend=nothing, size=(500,500), lwidth=8, distCircles=distCircles)
-        savefig(filename)
+        plot(exp_data["ActuatorArray"], actuatorCommands=actuatorCommands, agents=exp_data["Agents"], dev_forces=Fdev_arr, showReqForces=true, Fscale=params["Fscale"], legend=nothing, size=(500,500), lwidth=8, distCircles=distCircles);
+        savefig(filename);
     end
+
+    nothing
 end
 
-function run_exp(;platform=:MAG,
-    n=8,
+"""
+    runExp(<keyword arguments>)
+
+Run a numerical experiment testing the distributed optimization solver.
+
+# Arguments
+- `platform::Symbol=:MAG`: the distributed manipulation platform. Must be one of these three: `:MAG`, `:DEP`, `:ACU`.
+- `N_exps::Int=1`: number of numerical experiments to be carried out
+- `N_iter::Int=50`: number of iterations of the solver
+- `N_acts::Int=8`: the actuator array used in experiments is a `N_acts`by``N_acts matrix of actuators
+- `N_agnts::Int=4`: number of agents (i.e. manipulated objects)
+- `method::Symbol=:freedir`: decides the variant of the optimization problem. Either `:freedir` for minimizing the norm of the difference between the desired and developed force or `:fixdir` for generating the desired direction and minimizing the difference in the magnitude of the developed and desired force.
+- `showplots::Bool=true`: plot the results of the numerical experiments
+- `plotActuatorCommands::Bool=false`: plot the results of the numerical experiments
+- `plotNeighbtCircles::Bool=false`: encircle the used actuators by each agent
+- `saveplots::Bool=false`: save the plot. Applicable only when `N_exps=1`.
+- `errstats::Bool=false`: print some error statistics of each experiment
+- `plotConvergenceRates::Bool=false`: plot the global convergence measures of all experiments in one figure
+- `plotConvergenceRatesIndividual::Bool=false`: plot the convergence measures for each experiment. `convanalysis` must be true for this to be working.
+- `convanalysis::Bool=false`: if `true`, data from all iterations form all experiments are stored in `exps_data` array which is returned by `runExp()` function
+- `λ::Real`: `λ` parameter used in the solver
+- `ρ::Real`: `ρ` parameter used in the solver
+- `figfilename::String="test_fig.pdf"`: the file name of the saved plot
+- `display::Symbol=:iter`: ∈{:none, :iter, :final}
+- `agent_positions::Union{Array{Tuple{Float64,Float64},1}, Array{Tuple{Float64,Float64,Float64},1}}=missing`: array of positions of the agents. If `missing`, the positions are generated randomly.
+- `Fdes::Union{Array{Tuple{Float64,...,Float64},1}=missing`: array of desired forces. If `missing`, the forces are generated randomly.
+- `params::Dict{String, Any}=Dict{String, Any}()`: a dictionary of parameters used of the experiments. Check the code for details.
+
+# Examples
+```julia-repl
+julia> runExp(platform=:DEP, N_iter=25, N_agnts=6, N_acts=16);
+```
+"""
+function runExp(;platform=:MAG,
+    N_acts=8,
     N_iter=50, N_exps = 1, N_agnts = 4,
     method = :freedir,
-    f_showplots = true,
-    f_plotControls = false,
-    f_plotNeighbtCircles = false,
-    f_saveplots = false,
-    f_errstats = false,
-    f_showconvrate_all = false,
-    f_showconvrate_ind = false,
-    f_convAnalysis = true,
+    showplots = true,
+    plotActuatorCommands = false,
+    plotNeighbtCircles = false,
+    saveplots = false,
+    errstats = false,
+    plotConvergenceRates = false,
+    plotConvergenceRatesIndividual = false,
+    convanalysis = true,
     λ = missing, ρ= missing,
-    figFileName = "test_fig.pdf",
+    figfilename = "test_fig.pdf",
     display = :iter, # display = {:none, :iter, :final}
     agent_positions = missing,
     Fdes = missing,
@@ -253,7 +364,7 @@ function run_exp(;platform=:MAG,
 
     if platform == :DEP
         dx = F(100.0e-6);
-        aa = ActuatorArray(n, n, dx, dx/2, :square);
+        aa = ActuatorArray(N_acts, N_acts, dx, dx/2, :square);
 
         push!(params, "λ" => F(ismissing(λ) ? 1e4 : λ));
         push!(params, "ρ" => F(ismissing(ρ) ? 1e-4 : ρ));
@@ -273,7 +384,7 @@ function run_exp(;platform=:MAG,
         minMutualDist = 2*aa.dx;   # Set the minimum mutual distance between the agents
     elseif platform == :MAG
         dx = F(25.0e-3);
-        aa = ActuatorArray(n, n, dx, dx, :coil);
+        aa = ActuatorArray(N_acts, N_acts, dx, dx, :coil);
 
         push!(params, "λ" => F(ismissing(λ) ? 1 : λ));
         push!(params, "ρ" => F(ismissing(ρ) ? 1 : ρ));
@@ -291,7 +402,7 @@ function run_exp(;platform=:MAG,
         minMutualDist = 2*aa.dx;   # Set the minimum mutual distance between the agents
     elseif platform == :ACU
         dx = F(10.0e-3);
-        aa = ActuatorArray(n, n, dx);
+        aa = ActuatorArray(N_acts, N_acts, dx);
 
         push!(params, "λ" => F(ismissing(λ) ? 10000 : λ));
         push!(params, "ρ" => F(ismissing(ρ) ? 0.0001 : ρ));
@@ -312,13 +423,13 @@ function run_exp(;platform=:MAG,
 
     t_elapsed = Array{F}(undef, N_exps);
 
-    exp_data = Any[];
+    exps_data = Any[];
 
     for i in 1:N_exps
         display==:iter && @printf("------ %s - %s - Experiment #%d, λ: %f, ρ: %f ------\n", platform, method, i, params["λ"], params["ρ"])
 
-        # Initialize the controls to NaN
-        controls = fill(F(NaN), aa.nx, aa.ny);
+        # Initialize the actuator commands to NaN
+        actuatorCommands = fill(F(NaN), aa.nx, aa.ny);
 
         # Randomly generate agent positions if they are not provided
         if ismissing(agent_positions)
@@ -330,46 +441,44 @@ function run_exp(;platform=:MAG,
         # Initialize the agents
         agents = initAgents(aa, agnts_pos, params, Fdes = Fdes);
 
-        exp_data_i = Dict{String, Any}("Agents" => agents, "ActuatorArray" => aa, "Platform" => platform, "params" => params);
-        f_convAnalysis && push!(exp_data, exp_data_i);
-        f_convAnalysis && push!(exp_data_i, "conv_data" => ConvAnalysis_Data());
+        exps_data_i = Dict{String, Any}("Agents" => agents, "ActuatorArray" => aa, "Platform" => platform, "params" => params);
+        convanalysis && push!(exps_data, exps_data_i);
+        convanalysis && push!(exps_data_i, "conv_data" => ConvAnalysis_Data());
 
         t_elapsed[i] = @elapsed begin
             resolveNeighbrRelations!(agents);
 
             hist = admm(agents,
                 λ = params["λ"], ρ = params["ρ"],
-                log = f_convAnalysis,
+                log = convanalysis,
                 maxiter = N_iter,
                 method = method);
 
-            # Average the controls over the agents
-            controls = collapseControls(agents, aa);
+            # Average the actuator commands over the agents
+            actuatorCommands = averageActuatorsCommands(agents, aa);
         end
 
-        f_convAnalysis && push!(exp_data_i, "conv_data" => hist);
-        (f_convAnalysis || f_showplots || f_saveplots) && push!(exp_data_i, "Controls" => controls);
-        f_errstats && print_err_stats(exp_data_i, params);
-        f_showplots && showPlots(exp_data_i, params, f_convAnalysis && f_showconvrate_ind, f_plotControls=f_plotControls, f_showCircles=f_plotNeighbtCircles);
-        f_saveplots && savePlots(exp_data_i, params, f_plotControls=f_plotControls, filename=figFileName, f_showCircles=f_plotNeighbtCircles);
+        convanalysis && push!(exps_data_i, "conv_data" => hist);
+        (convanalysis || showplots || saveplots) && push!(exps_data_i, "ActuatorCommands" => actuatorCommands);
+        errstats && printErrStats(exps_data_i, params);
+        showplots && showPlots(exps_data_i, params, plotConvAnalysis=(convanalysis && plotConvergenceRatesIndividual), plotActuatorCommands=plotActuatorCommands, showCircles=plotNeighbtCircles);
+        saveplots && savePlots(exps_data_i, params, plotActuatorCommands=plotActuatorCommands, filename=figfilename, showCircles=plotNeighbtCircles);
 
         display==:iter && @printf("Time elapsed: %3.2f ms.\n", 1e3*t_elapsed[i])
-        # Run the Garbage Collector
-        # @time GC.gc();
     end
 
     (display==:iter || display==:final) && @printf("%s - %s - λ: %f, ρ: %f - Time elapsed - mean: %3.2f ms, meadian: %3.2f ms.\n", platform, method, params["λ"], params["ρ"], 1e3*mean(t_elapsed), 1e3*median(t_elapsed));
 
-    if f_showconvrate_all && f_convAnalysis
-        Plots.display(plot([conv_measure(exp_datak["conv_data"]) for exp_datak in exp_data], legend=nothing, linecolor=:red, linealpha=0.3,
+    if plotConvergenceRates && convanalysis
+        Plots.display(plot([conv_measure(exps_datak["conv_data"]) for exps_datak in exps_data], legend=nothing, linecolor=:red, linealpha=0.3,
         leg=false, size=(700,200), yscale=:log10, xlabel="Iteration", ylabel="Convergence measure"))
 
-        Plots.display(plot!( mean([conv_measure(exp_datak["conv_data"]) for exp_datak in exp_data]), legend=nothing, linecolor=:blue, linewidth=3))
+        Plots.display(plot!( mean([conv_measure(exps_datak["conv_data"]) for exps_datak in exps_data]), legend=nothing, linecolor=:blue, linewidth=3))
 
         savefig("TestConv_all.pdf")
     end
 
-    f_convAnalysis ? (params, exp_data) : (params);
+    convanalysis ? (params, exps_data) : (params);
 end
 
 end

@@ -10,7 +10,7 @@ export plot_AA, visu_pressure
 
 # Plotting function
 @recipe function plot_AA(aa::ActuatorArray{T,U};
-    controls = fill(NaN, aa.nx, aa.ny),
+    actuatorCommands = fill(NaN, aa.nx, aa.ny),
     ctrlim = (0, 1),
     controls_clr_fun = α -> RGBA(1, 1-α, 1-α, 1),
     boxes = Array{Array{Tuple{U,U},1},1}(),
@@ -29,8 +29,8 @@ export plot_AA, visu_pressure
     Fdev_clr = :yellow,
     Faux_clr = :green,
     Freq_clr = :red)  where {T<:Real,U<:Unsigned}
-    # if controls is provided, check whether it has the correct size
-    @assert size(controls) == (aa.nx, aa.ny) "The matrix of phase-shifts doesn't have the correct size!"
+    # if actuator commands are provided, check whether it has the correct size
+    @assert size(actuatorCommands) == (aa.nx, aa.ny) "The matrix of phase-shifts doesn't have the correct size!"
 
     if plotUsedActuators && length(agents) > 0 && ismissing(plotUsedActuators_enable)
         plotUsedActuators_enable = fill(true, length(agents));
@@ -149,8 +149,8 @@ export plot_AA, visu_pressure
             seriescolor := :black
             label := ""
 
-            if ~isnan(controls[ai,aj])
-                α = (controls[ai,aj] - ctrlim[1]) / (ctrlim[2] - ctrlim[1]);
+            if ~isnan(actuatorCommands[ai,aj])
+                α = (actuatorCommands[ai,aj] - ctrlim[1]) / (ctrlim[2] - ctrlim[1]);
                 # fill_clr = RGBA(0.4*α + 0.6, 0, 0.4*(1-α)+0.6, 1);
                 fill_clr = controls_clr_fun(α);
             else
