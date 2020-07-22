@@ -6,16 +6,16 @@
 
 
 ## Instalation
-Install the package simply by running the following command:
+Install the package by entering the Pkg REPL (pressing `]`) and running the following command:
 ```
-julia> Pkg.add("https://github.com/martingurtner/DistCtrl4DistMan.jl")
+(@1.4) pkg> add https://github.com/martingurtner/DistCtrl4DistMan.jl
 ```
 
 ## Running the experiments
 You can run numerical experiments by using the `runExp()` function. Check the documentation of this function for details.
 ```
 julia> using DistCtrl4DistMan: runExp
-julia> runExp(platform=:MAG, N_agnts=4, n=8)
+julia> runExp(platform=:MAG, N_agnts=4, n=8);
 ```
 
 ## Images and animations accompanying the paper
