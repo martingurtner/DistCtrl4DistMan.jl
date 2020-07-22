@@ -33,8 +33,8 @@ agents_clrs = [
 # Initialize the actuatorCommands to NaN
 actuatorCommands = fill(NaN, aa.nx, aa.ny);
 
-dt = 1/50;
-Tf = 1;
+dt = 1/25;
+Tf = 10;
 
 anim = Animation();
 
@@ -67,7 +67,7 @@ let agents_ctrl = agents_ctrl
         Fdev_arr = [params["calcForce"](aa, agnt.pos, actuatorCommands) for agnt in agents];
 
         # Simulate the agents' state one time step ahead
-        [simulate!(agnt, aa, dt, actuatorCommands) for agnt ∈ agents_ctrl]
+        [simulate!(agnt, aa, dt, actuatorCommands, abstol=1e-5, reltol=1e-5) for agnt ∈ agents_ctrl]
 
         Plots.display(plot(aa,
                 actuatorCommands = actuatorCommands,
@@ -86,4 +86,4 @@ let agents_ctrl = agents_ctrl
     end
 end
 
-gif(anim, "anim.gif", fps=50)
+gif(anim, "simul_MAG.gif", fps=25)

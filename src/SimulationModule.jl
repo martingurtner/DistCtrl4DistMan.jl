@@ -112,15 +112,15 @@ function ode_fun_DEP(du, u, p, t)
     du[6] = 0
 end
 
-function simulate!(agnt_ctrl::AgentCtrlMAG, aa::ActuatorArray, dt, actuatorCommands)
-    sol = solve(ODEProblem(ode_fun_MAG, agnt_ctrl.state, (0, dt), (aa, actuatorCommands)))
+function simulate!(agnt_ctrl::AgentCtrlMAG, aa::ActuatorArray, dt, actuatorCommands; solvopts...)
+    sol = solve(ODEProblem(ode_fun_MAG, agnt_ctrl.state, (0, dt), (aa, actuatorCommands)); solvopts...)
     agnt_ctrl.state = sol.u[end]
 
     nothing
 end
 
-function simulate!(agnt_ctrl::AgentCtrlDEP, aa::ActuatorArray, dt, actuatorCommands)
-    sol = solve(ODEProblem(ode_fun_DEP, agnt_ctrl.state, (0, dt), (aa, actuatorCommands)))
+function simulate!(agnt_ctrl::AgentCtrlDEP, aa::ActuatorArray, dt, actuatorCommands; solvopts...)
+    sol = solve(ODEProblem(ode_fun_DEP, agnt_ctrl.state, (0, dt), (aa, actuatorCommands)); solvopts...)
     agnt_ctrl.state = sol.u[end]
 
     nothing
