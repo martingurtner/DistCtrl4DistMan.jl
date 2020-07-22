@@ -2,7 +2,6 @@
     ObjectAgentModule
 Module implementing all the operations on agents.
 """
-
 module ObjectAgentModule
 
 include("SquaredMatrixPlusIModule.jl")

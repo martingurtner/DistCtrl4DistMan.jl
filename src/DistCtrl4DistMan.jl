@@ -10,6 +10,7 @@ include("ObjectAgentModule.jl")
 include("ConvAnalysisModule.jl")
 include("ADMMModule.jl")
 include("PlottingModule.jl")
+include("SimulationModule.jl")
 
 using LinearAlgebra
 using Statistics
@@ -22,6 +23,7 @@ using .ObjectAgentModule
 using .ADMMModule
 using .ConvAnalysisModule
 using .PlottingModule
+using .SimulationModule
 
 """
     genRandomPositions(N, params, xlim, ylim, minMutualDist)

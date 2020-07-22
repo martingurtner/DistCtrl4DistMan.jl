@@ -11,8 +11,7 @@ export plot_AA, visu_pressure
 # Plotting function
 @recipe function plot_AA(aa::ActuatorArray{T,U};
     actuatorCommands = fill(NaN, aa.nx, aa.ny),
-    ctrlim = (0, 1),
-    controls_clr_fun = α -> RGBA(1, 1-α, 1-α, 1),
+    actuatorType = :currents, #:phases
     boxes = Array{Array{Tuple{U,U},1},1}(),
     agents = Array{ObjectAgent, 1}(),
     agents_clrs = missing,
@@ -39,12 +38,32 @@ export plot_AA, visu_pressure
     aspect_ratio := :equal
     framestyle := :border
 
-    if aa.dx < 1e-3
-        scale = 1e3;
-    elseif aa.dx < 1
-        scale = 1e1;
+    currents_colorfun(α) = begin
+        RGBA(1, 1-α, 1-α, 1);
+    end
+    phases_colorfun(α) = begin
+        α = mod(α, 2*π)/2/π
+
+        if α < 1/3
+            k = 3*α
+            clr = RGBA(1,1-k,1-k,1)
+        elseif α < 2/3
+            k = 3*(α-1/3)
+            clr = RGBA(1-k,0,k,1)
+        else
+            k = 3*(α-2/3)
+            clr = RGBA(k,k,1,1)
+        end
+
+        clr
+    end
+
+    if actuatorType == :currents
+        act_colorfun = currents_colorfun
+    elseif actuatorType == :phases
+        act_colorfun = phases_colorfun
     else
-        scale = 1;
+        error("Unsupported actuator type.")
     end
 
     xlims := (-aa.dx/2, (aa.nx-0.5)*aa.dx)
@@ -150,9 +169,7 @@ export plot_AA, visu_pressure
             label := ""
 
             if ~isnan(actuatorCommands[ai,aj])
-                α = (actuatorCommands[ai,aj] - ctrlim[1]) / (ctrlim[2] - ctrlim[1]);
-                # fill_clr = RGBA(0.4*α + 0.6, 0, 0.4*(1-α)+0.6, 1);
-                fill_clr = controls_clr_fun(α);
+                fill_clr = act_colorfun(actuatorCommands[ai,aj])
             else
                 fill_clr = RGBA(1, 1, 1, .8);
             end
