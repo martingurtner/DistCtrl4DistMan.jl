@@ -6,12 +6,20 @@
 
 
 ## Instalation
+Install the package simply by running the following command:
 ```
-Pkg.add("https://github.com/martingurtner/DistCtrl4DistMan.jl")
+julia> Pkg.add("https://github.com/martingurtner/DistCtrl4DistMan.jl")
 ```
 
 ## Running the experiments
+You can run numerical experiments by using the `runExp()` function. Check the documentation of this function for details.
 ```
-using DistCtrl4DistMan: run_exp
-run_exp(platform=:MAG, N_agnts=4, n=8)
+julia> using DistCtrl4DistMan: runExp
+julia> runExp(platform=:MAG, N_agnts=4, n=8)
 ```
+
+## Images and animations accompanying the paper
+You can generate the images and animations accompanying the paper by running the scripts in the `utilities/` folder.
+| Magnetophoresis  | Dielectrophoresis |
+| ------------- | ------------- |
+| <img src="docs/simul_MAG.gif" align="center" />  | <img src="docs/simul_DEP.gif" align="center" />  |
