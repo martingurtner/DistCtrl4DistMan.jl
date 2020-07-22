@@ -6,7 +6,7 @@
 
 
 ## Instalation
-Install the package by entering the Pkg REPL (pressing `]`) and running the following command:
+Install the package by entering the Pkg REPL (press `]`) and running the following command:
 ```
 (@1.4) pkg> add https://github.com/martingurtner/DistCtrl4DistMan.jl
 ```
