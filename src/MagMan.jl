@@ -98,7 +98,7 @@ end
 
 function genGxy(aa::ActuatorArray,
     pos::Tuple{T, T},
-    al::Array{Tuple{U,U}, 1} = vec([(j,i) for i in oneunit(aa.nx):aa.nx, j in oneunit(aa.ny):aa.ny])) where {T<:Real, U<:Unsigned}
+    al::Array{Tuple{U,U}, 1} = vec([(i,j) for j in oneunit(aa.ny):aa.ny, i in oneunit(aa.nx):aa.nx])) where {T<:Real, U<:Unsigned}
 
     Gxy = zeros(length(al), 2);
     for (k, a_pos) in enumerate(al)

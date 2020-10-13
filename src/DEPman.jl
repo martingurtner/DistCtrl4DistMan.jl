@@ -113,7 +113,7 @@ end
 
 include("DEP_model.jl");
 function genC_DEP(aa::ActuatorArray{T,U}, pos::Tuple{T, T, T},
-    al::Array{Tuple{U, U}, 1} = vec([(j,i) for i in oneunit(aa.nx):aa.nx, j in oneunit(aa.ny):aa.ny]) ) where {T<:Real,U<:Unsigned}
+    al::Array{Tuple{U, U}, 1} = vec([(i,j) for j in oneunit(aa.ny):aa.ny, i in oneunit(aa.nx):aa.nx]) ) where {T<:Real,U<:Unsigned}
     # p = Vector{ComplexF32}(undef, length(al));
     Γ = zeros(T, length(al), 3);
     Λₐ = (zeros(T, length(al), 3), # Lambda_x

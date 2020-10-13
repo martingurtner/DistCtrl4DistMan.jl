@@ -10,7 +10,7 @@ const p_r = 5.0f-3;   # transducer's radius [m]
 const p_k = 2*π*p_f/p_c0;
 
 function genC_ACU(aa::ActuatorArray{T,U}, pos::Tuple{T, T, T},
-    al::Array{Tuple{U, U}, 1} = vec([(j,i) for i in oneunit(aa.nx):aa.nx, j in oneunit(aa.ny):aa.ny]) ) where {T<:Real,U<:Unsigned}
+    al::Array{Tuple{U, U}, 1} = vec([(i,j) for j in oneunit(aa.ny):aa.ny, i in oneunit(aa.nx):aa.nx]) ) where {T<:Real,U<:Unsigned}
     # p = Vector{ComplexF32}(undef, length(al));
     zvec = Array{T,2}(undef, length(al), 2);
     for (k, a_pos) in enumerate(al)
