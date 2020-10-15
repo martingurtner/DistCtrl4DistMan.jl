@@ -346,7 +346,7 @@ Run a numerical experiment testing the distributed optimization solver.
 - `platform::Symbol=:MAG`: the distributed manipulation platform. Must be one of these three: `:MAG`, `:DEP`, `:ACU`.
 - `N_exps::Int=1`: number of numerical experiments to be carried out
 - `N_iter::Int=50`: number of iterations of the solver
-- `N_acts::Int=8`: the actuator array used in experiments is a `N_acts`by``N_acts matrix of actuators
+- `N_acts::Tuple{Int,Int}=(8,8)`: the actuator array used in experiments is a `N_acts`by``N_acts matrix of actuators
 - `N_agnts::Int=4`: number of agents (i.e. manipulated objects)
 - `method::Symbol=:freedir`: decides the variant of the optimization problem. Either `:freedir` for minimizing the norm of the difference between the desired and developed force or `:fixdir` for generating the desired direction and minimizing the difference in the magnitude of the developed and desired force.
 - `showplots::Bool=true`: plot the results of the numerical experiments
@@ -369,7 +369,7 @@ julia> runExp(platform=:DEP, N_iter=25, N_agnts=6, N_acts=16);
 ```
 """
 function runExp(;platform=:MAG,
-    N_acts=8,
+    N_acts=(8,8),
     N_iter=50, N_exps = 1, N_agnts = 4,
     method = :freedir,
     showplots = true,
@@ -384,6 +384,7 @@ function runExp(;platform=:MAG,
     display = :iter, # display = {:none, :iter, :final}
     agent_positions = missing,
     Fdes = missing,
+    ignore_list = Array{Tuple{Int64, Int64},1}(),
     params = Dict{String, Any}())
 
     # Used number types
@@ -395,7 +396,7 @@ function runExp(;platform=:MAG,
     if platform == :DEP
         params = merge(DEP_params, params);
 
-        aa = ActuatorArray(N_acts, N_acts, params["dx"], params["dx"]/2, :square);
+        aa = ActuatorArray(N_acts[1], N_acts[2], params["dx"], params["dx"]/2, :square, ignore_list);
 
         xlim = (2*aa.dx, (aa.nx-3)*aa.dx);
         ylim = (2*aa.dx, (aa.ny-3)*aa.dx);
@@ -404,7 +405,7 @@ function runExp(;platform=:MAG,
     elseif platform == :MAG
         params = merge(MAG_params, params);
 
-        aa = ActuatorArray(N_acts, N_acts, params["dx"], params["dx"], :coil);
+        aa = ActuatorArray(N_acts[1], N_acts[2], params["dx"], params["dx"], :coil, ignore_list);
 
         xlim = (aa.dx, (aa.nx-2)*aa.dx);
         ylim = (aa.dx, (aa.ny-2)*aa.dx);
@@ -413,7 +414,7 @@ function runExp(;platform=:MAG,
     elseif platform == :ACU
         params = merge(ACU_params, params);
 
-        aa = ActuatorArray(N_acts, N_acts, params["dx"]);
+        aa = ActuatorArray(N_acts[1], N_acts[2], params["dx"], :circle, ignore_list);
 
         xlim = (2*aa.dx, (aa.nx-3)*aa.dx);
         ylim = (2*aa.dx, (aa.ny-3)*aa.dx);

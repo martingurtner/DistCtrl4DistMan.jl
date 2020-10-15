@@ -161,6 +161,11 @@ export plot_AA, visu_pressure
 
     # Iterate over indexes of the actuators
     for (ai, aj) in aa
+        # skip the actuator if it is in the ignore list
+        if in((ai, aj), aa.ignore_list)
+            continue;
+        end
+
         # get the position of the acutator with indexes (ai, aj)
         ax, ay = actuatorPosition(aa, (ai, aj));
 

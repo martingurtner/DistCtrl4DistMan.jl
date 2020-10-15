@@ -9,14 +9,17 @@ struct ActuatorArray{T<:Real, U<:Unsigned}
     dx::T # Spacing of the actuators (it is assumed that the spacing is the same along both directions)
     width::T # Width of one actuator
     shape::Symbol # shape of the actuator (either :cicrcle, :square or :coil)
+    ignore_list::Array{Tuple{U,U}, 1} # list of ignored actuators
 
-    function ActuatorArray(nx::U, ny::U, dx::T, width::T=dx, shape::Symbol=:circle)  where {T<:Real, U<:Unsigned}
-        new{T, U}(nx, ny, dx, width, shape)
+    function ActuatorArray(nx::U, ny::U, dx::T, width::T=dx, shape::Symbol=:circle, ignore_list::Array{Tuple{U,U}, 1} = Array{Tuple{U,U}, 1}())  where {T<:Real, U<:Unsigned}
+        new{T, U}(nx, ny, dx, width, shape, ignore_list)
     end
 
-    function ActuatorArray(nx::I, ny::I, dx::T, width::T=dx, shape::Symbol=:circle)  where {T<:Real, I<:Int}
+    function ActuatorArray(nx::I, ny::I, dx::T, width::T=dx, shape::Symbol=:circle, ignore_list::Array{Tuple{I,I}, 1} = Array{Tuple{I, I}, 1}())  where {T<:Real, I<:Int}
         @assert (nx > 1 && ny > 1) "The number of actuators along x and y axis must be positive."
-        new{T, unsigned(I)}(unsigned(nx), unsigned(ny), dx, width, shape)
+        # convert the ignore list from signed int to unsigned ints
+        ignore_list_U = [(unsigned(a[1]), unsigned(a[2])) for a in ignore_list];
+        new{T, unsigned(I)}(unsigned(nx), unsigned(ny), dx, width, shape, ignore_list_U)
     end
 end
 
@@ -63,6 +66,11 @@ function genActList(aa::ActuatorArray{T,U}, objPos::Tuple{T,T,T}, maxDist_used, 
     # println("ii_max = $ii_max, ii_min = $ii_min, jj_max = $jj_max, jj_min = $jj_min")
 
     for ii in ii_min:ii_max, jj in jj_min:jj_max
+        # if the actuator is in the ignore list, continue the next actuator
+        if in((ii, jj), aa.ignore_list)
+            continue;
+        end
+
         # Check whether the actuator is within the specified distance from the the actuator. If it is, add the
         # actuator to the corresponding list of actuators.
         act_px, act_py = actuatorPosition(aa, (ii, jj));

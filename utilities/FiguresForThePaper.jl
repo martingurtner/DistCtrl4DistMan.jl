@@ -6,19 +6,19 @@ MAG_params = Dict{String,Any}("maxDist" => (50e-3, 75e-3));
 ACU_params = Dict{String,Any}("maxDist" => (45e-3, 65e-3));
 
 ## DEP - two microparticles, 16x16 array of electrodes
-runExp(platform=:DEP, N_iter=25, N_agnts=2, N_acts=16, convanalysis=false, saveplots=true, figfilename="DEParray_small.pdf", params=DEP_params);
+runExp(platform=:DEP, N_iter=25, N_agnts=2, N_acts=(16, 16), convanalysis=false, saveplots=true, figfilename="DEParray_small.pdf", params=DEP_params);
 
 ## DEP - six microparticles, 16x16 array of electrodes
-runExp(platform=:DEP, N_iter=25, N_agnts=6, N_acts=16,convanalysis=false, saveplots=true, figfilename="DEParray.pdf", params=DEP_params);
+runExp(platform=:DEP, N_iter=25, N_agnts=6, N_acts=(16, 16),convanalysis=false, saveplots=true, figfilename="DEParray.pdf", params=DEP_params);
 
 ## MAG - five steel balls, 8x8 array of coils
-runExp(platform=:MAG, N_iter=25, N_agnts=5, N_acts=8, convanalysis=false, saveplots=false, figfilename="MAGarray_8x8.pdf", plotActuatorCommands=true);
+runExp(platform=:MAG, N_iter=25, N_agnts=5, N_acts=(8, 8), convanalysis=false, saveplots=false, figfilename="MAGarray_8x8.pdf", plotActuatorCommands=true);
 
 ## MAG - five steel balls, 12x12 array of coils
-runExp(platform=:MAG, N_iter=25, N_agnts=5, N_acts=12, convanalysis=false, saveplots=true, figfilename="MAGarray_12x12.pdf", plotActuatorCommands=true);
+runExp(platform=:MAG, N_iter=25, N_agnts=5, N_acts=(12, 12), convanalysis=false, saveplots=true, figfilename="MAGarray_12x12.pdf", plotActuatorCommands=true);
 
 ## ACU - six pressure points, 16x16 array of actuators
-runExp(platform=:ACU, N_iter=25, N_agnts=6, N_acts=16,convanalysis=false, saveplots=true, figfilename="ACUarray.pdf");
+runExp(platform=:ACU, N_iter=25, N_agnts=6, N_acts=(16, 16),convanalysis=false, saveplots=true, figfilename="ACUarray.pdf");
 
 ## DEP - six microparticles, 16x16 array of electrodes, Algorithm 1 vs Algorithm 2
 N_agnts=2;
