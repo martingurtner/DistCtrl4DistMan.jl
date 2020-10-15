@@ -414,7 +414,7 @@ function runExp(;platform=:MAG,
     elseif platform == :ACU
         params = merge(ACU_params, params);
 
-        aa = ActuatorArray(N_acts[1], N_acts[2], params["dx"], :circle, ignore_list);
+        aa = ActuatorArray(N_acts[1], N_acts[2], params["dx"], params["dx"], :circle, ignore_list);
 
         xlim = (2*aa.dx, (aa.nx-3)*aa.dx);
         ylim = (2*aa.dx, (aa.ny-3)*aa.dx);
