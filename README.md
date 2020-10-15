@@ -15,7 +15,7 @@ Install the package by entering the Pkg REPL (press `]`) and running the followi
 You can run numerical experiments by using the `runExp()` function. Check the documentation of this function for details.
 ```
 julia> using DistCtrl4DistMan: runExp
-julia> runExp(platform=:MAG, N_agnts=4, n=8);
+julia> runExp(platform=:MAG, N_agnts=4, N_acts=(8, 8);
 ```
 
 ## Images and animations accompanying the paper
