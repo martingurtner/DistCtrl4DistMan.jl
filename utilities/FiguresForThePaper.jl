@@ -26,7 +26,7 @@ N_iter=25;
 N_acts = 16;
 
 # run the experiment with Algorithm 2 (i.e. with different c_i and d_i sets)
-params, exp_data_A2 = runExp(platform=:DEP, N_iter=N_iter, N_agnts=N_agnts, N_acts=N_acts,
+params, exp_data_A2 = runExp(platform=:DEP, N_iter=N_iter, N_agnts=N_agnts, N_acts=(N_acts,N_acts),
                             convanalysis=true,
                             saveplots=false,
                             showplots=false,
@@ -40,7 +40,7 @@ Fdes = [agnts[i].Fdes .* agnts[i].Fdes_sc for i in 1:length(agnts)];
 # run the experiment with Algorithm 1 (c_i = d_i)
 DEP_params_A1 = copy(DEP_params);
 DEP_params_A1["maxDist"] = (300e-6, 300e-6);
-params_A1, exp_data_A1 = runExp(platform=:DEP, N_iter=N_iter, N_agnts=N_agnts, N_acts=N_acts,
+params_A1, exp_data_A1 = runExp(platform=:DEP, N_iter=N_iter, N_agnts=N_agnts, N_acts=(N_acts,N_acts),
                             convanalysis=true,
                             saveplots=false,
                             showplots=false,
