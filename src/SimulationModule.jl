@@ -10,7 +10,7 @@ using ..ObjectAgentModule
 using DifferentialEquations
 using LinearAlgebra
 
-export AgentCtrlDEP, AgentCtrlMAG, CircularTrajectoryGenerator, RegulatorP, control_law, generate_reference, simulate!
+export AgentCtrlDEP, AgentCtrlMAG, CircularTrajectoryGenerator, WaypointsTrajectoryGenerator, RegulatorP, control_law, generate_reference, simulate!, agent_pos
 
 ## Abstract types
 abstract type AbstractTrajectoryGenerator end
@@ -29,6 +29,18 @@ struct CircularTrajectoryGenerator <: AbstractTrajectoryGenerator
     freq::Real
     phase::Real
     offset::Tuple{T,T}  where T<:Real
+end
+
+mutable struct WaypointsTrajectoryGenerator <: AbstractTrajectoryGenerator
+    points::Union{Array{Tuple{T, T}, 1}, Array{Tuple{T, T, T}, 1}} where T<:Real
+    switch_dist::Real
+    current_point_index 
+    repeat
+    dir
+
+    function WaypointsTrajectoryGenerator(points::Array{Tuple{T, T}, 1}, switch_dist, repeat=false) where T<:Real
+        new(points, switch_dist, 1, repeat, 1)
+    end
 end
 
 ## Agents - structures storing the state of the manipulated objects (position and velocity)
@@ -65,15 +77,44 @@ function control_law(reg::RegulatorP, agnt::AgentCtrlDEP, p_ref::Tuple{Float64, 
 end
 
 function control_law(agnt::AbstractAgentCtrl, time)
-    ref_pos = generate_reference(agnt.ref_gen, time);
+    ref_pos = generate_reference(agnt.ref_gen, time, agent_pos(agnt));
     return control_law(agnt.reg, agnt, ref_pos);
 end
 
-function generate_reference(traj_gen::CircularTrajectoryGenerator, t)
+function generate_reference(traj_gen::CircularTrajectoryGenerator, t, pos)
     x_traj = traj_gen.radius * sin(2*π*traj_gen.freq*t + traj_gen.phase) + traj_gen.offset[1];
     y_traj = traj_gen.radius * cos(2*π*traj_gen.freq*t + traj_gen.phase) + traj_gen.offset[2];
 
     x_traj, y_traj
+end
+
+function generate_reference(traj_gen::WaypointsTrajectoryGenerator, t, pos)
+    if norm(traj_gen.points[traj_gen.current_point_index] .- pos) < traj_gen.switch_dist
+        if (traj_gen.current_point_index + traj_gen.dir) > length(traj_gen.points) || (traj_gen.current_point_index + traj_gen.dir) < 1
+            if traj_gen.repeat
+                traj_gen.dir = -1*traj_gen.dir
+            else
+                if traj_gen.dir > 0
+                    traj_gen.current_point_index = length(traj_gen.points)
+                else
+                    traj_gen.current_point_index = 1
+                    traj_gen.dir = 0
+                end
+            end
+        else
+            traj_gen.current_point_index += traj_gen.dir
+        end
+    end
+
+    traj_gen.points[traj_gen.current_point_index]
+end
+
+function agent_pos(agnt::AgentCtrlMAG)
+    return agnt.state[1], agnt.state[3]
+end
+
+function agent_pos(agnt::AgentCtrlDEP)
+    return agnt.state[1], agnt.state[3], agnt.state[5]
 end
 
 function ode_fun_MAG(du, u, p, t)

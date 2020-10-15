@@ -1,7 +1,7 @@
 using Printf
 using Plots
 
-using DistCtrl4DistMan: ActuatorArray, genRandomPositions, initAgents, resolveNeighbrRelations!, averageActuatorCommands, calcDEPForce, calcMAGForce, calcPressure, ConvAnalysis_Data, showPlots, savePlots, admm, MAG_params, AgentCtrlMAG, RegulatorP, CircularTrajectoryGenerator, simulate!, control_law, generate_reference
+using DistCtrl4DistMan: ActuatorArray, genRandomPositions, initAgents, resolveNeighbrRelations!, averageActuatorCommands, calcDEPForce, calcMAGForce, calcPressure, ConvAnalysis_Data, showPlots, savePlots, admm, MAG_params, AgentCtrlMAG, RegulatorP, CircularTrajectoryGenerator, simulate!, control_law, generate_reference, agent_pos
 
 ############# PARAMS ############
 N_acts = 8;
@@ -75,7 +75,7 @@ let agents_ctrl = agents_ctrl
                 agents_clrs = agents_clrs,
                 # plotUsedActuators = t>3 ? true : false,
                 plotUsedActuators = false,
-                ref_pos = [generate_reference(agnt.ref_gen, t) for agnt ∈ agents_ctrl],
+                ref_pos = [generate_reference(agnt.ref_gen, t, agent_pos(agnt)) for agnt ∈ agents_ctrl],
                 dev_forces=Fdev_arr,
                 showReqForces=true,
                 Fdev_clr = :black,
