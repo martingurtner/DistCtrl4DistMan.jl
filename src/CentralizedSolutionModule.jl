@@ -22,12 +22,13 @@ mutable struct CentralizedSolutionIterable{T<:Real}
     elapsed::T;
 
     function CentralizedSolutionIterable(λ::T, agents::Array{<:ObjectAgent, 1}, aa::ActuatorArray, maxiter::Int) where T<:Real
-        N_actuators = length(agents[1].actList)
-
-        # Initialize the decision vector by the values from the agents (take the average)
-        xk = zeros(T, N_actuators);
+        # Initialize the decision vector by the values from the agents
+        xk = zeros(T, aa.nx*aa.ny);
         for a in agents
-            xk += a.xk/length(agents)
+            for (i, act) in enumerate(a.actList)
+                ind_i = act[1] + (act[2]-1)*aa.ny
+                xk[ind_i] = a.xk[i]
+            end
         end
 
         # Initialize the Jacobian
@@ -37,10 +38,10 @@ mutable struct CentralizedSolutionIterable{T<:Real}
         else
             F_dim = agent_J_size[2]
         end
-        J = zeros(T, N_actuators, length(agents)*F_dim);
+        J = zeros(T, aa.nx*aa.ny, length(agents)*F_dim);
         fvk = zeros(T, length(agents)*F_dim);
 
-        lsd = LinSystemData{T}(Int(N_actuators), length(agents)*F_dim)
+        lsd = LinSystemData{T}(Int(aa.nx*aa.ny), length(agents)*F_dim)
 
         new{T}(λ, agents, aa, xk, J, fvk, F_dim, lsd, maxiter, 0)
     end
@@ -50,18 +51,28 @@ function iterate(it::CentralizedSolutionIterable{<:Real}, iteration::Int=0)
     if iteration >= it.maxiter return nothing end
 
     # Update the jacobians and fvk
-    # it.elapsed += @elapsed for agent in it.agents
-    for agent in it.agents
+    it.elapsed += @elapsed for agent in it.agents
         jac!(agent)
         costFun!(agent);
     end
 
     # Construct the jacobian and fvk
-    it.elapsed += @elapsed for (k, a) in enumerate(it.agents)
-        ind_start = ((k-1)*it.F_dim+1)
-        ind_end = k*it.F_dim 
-        it.J[:, ind_start:ind_end] .= a.J
-        it.fvk[ind_start:ind_end] .= a.fvk
+    ind_i = 0
+    in_j = 0
+    for (k, a) in enumerate(it.agents)
+        # Jacobian
+        for (i, act) in enumerate(a.actList)
+            ind_i = act[2] + (act[1]-1)*it.aa.nx
+            for j in 1:it.F_dim
+                ind_j = j+it.F_dim*(k-1)
+                it.J[ind_i, ind_j] = a.J[i,j]
+            end
+        end
+
+        # fvk
+        for j in 1:it.F_dim
+            it.fvk[it.F_dim*(k-1)+j] = a.fvk[j]
+        end
     end
 
     # Update the decision vector
@@ -71,9 +82,12 @@ function iterate(it::CentralizedSolutionIterable{<:Real}, iteration::Int=0)
     end
 
     # Propagate the updated decision vector to the agents
-    for a in it.agents
-        a.xk .= it.xk
-        a.zk .= it.xk
+    for (k, a) in enumerate(it.agents)
+        for (i, act) in enumerate(a.actList)
+            ind_i = act[2] + (act[1]-1)*it.aa.nx
+            a.xk[i] = it.xk[ind_i]
+            a.zk[i] = it.xk[ind_i]
+        end
     end    
 
     return (iteration, iteration+1);

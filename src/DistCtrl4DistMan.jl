@@ -106,36 +106,16 @@ function initAgents(
     N = size(oa_pos)[1];
     
     # Initialize agent actuator lists
-    act_considered = []
-    act_optimized = []
     for k in 1:N
-        if params["platform"] == :DEP || params["platform"] == :ACU 
+        if params["platform"] == :DEP || params["platform"] == :MAG 
             aL, a_used = genActList(aa, oa_pos[k], params["maxDist"][1], params["maxDist"][2]);
         elseif params["platform"] == :MAG
             aL, a_used = genActList(aa, (oa_pos[k][1], oa_pos[k][2], T(0)), params["maxDist"][1], params["maxDist"][2]);
         else
             error("Unsupported platform")
         end
-
         push!(act_considered, aL)
         push!(act_optimized, a_used)
-    end
-
-    if algorithm == :centralized
-        actuators_union = Set()
-        for k in 1:N 
-            union!(actuators_union, Set(act_considered[k]))
-        end
-
-        act_union = Array{Tuple{U,U},1}()
-        for a in actuators_union
-            push!(act_union, a)
-        end
-        
-        for k in 1:N
-            act_considered[k] = act_union
-            act_optimized[k] = collect(U, range(1,length=length(act_union)))
-        end
     end
 
     if params["platform"] == :DEP
