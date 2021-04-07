@@ -1,4 +1,4 @@
-export ObjectAgent_DEP, calcDEPForce
+export ObjectAgent_DEP, calcDEPForce, jac!
 
 # ---------------------------- DEP -------------------------
 const k_DEP = 3.47538687303371e-23; # pi*obj.e_0*obj.Medium.Permittivity*obj.Particle.Radius^3
@@ -22,8 +22,6 @@ mutable struct ObjectAgent_DEP{T,U} <: ObjectAgent{T,U}
     rcvBuffer_u::Vector{T};
     rcvBuffer_N::Vector{T};
     J::Array{T, 2};
-    vk_r::Vector{T};
-    vk_i::Vector{T};
     lsd::LinSystemData{T};
     decDir::Vector{T};
     fvk::Vector{T};
@@ -88,8 +86,6 @@ mutable struct ObjectAgent_DEP{T,U} <: ObjectAgent{T,U}
         zeros(T, n), # buffer uk
         zeros(T, n), # buffer N
         zeros(T, length(act_used), 3), # J
-        zeros(T, n), # vk_r
-        zeros(T, n), # vk_r
         lsd,         # LinSystemData
         lsd.x_sol,   # decDir
         zeros(T, 3), # fvk
@@ -209,8 +205,8 @@ end
 function updatex_dirFixed!(oa::ObjectAgent_DEP{T,U}, λ::T) where {T<:Real, U<:Unsigned}
     oa.xk .= oa.zk .- oa.uk;
 
-    oa.vk_r .= cos.(oa.xk);
-    oa.vk_i .= sin.(oa.xk);
+    vk_r = cos.(oa.xk);
+    vk_i = sin.(oa.xk);
 
     jac!(oa); # DEP ~40 us
 
@@ -222,7 +218,7 @@ function updatex_dirFixed!(oa::ObjectAgent_DEP{T,U}, λ::T) where {T<:Real, U<:U
                  [-oa.J' Fd' zeros(3,3)]);
 
     for i in 1:3
-        oa.b_kkt[end-3+i] = oa.vk_r'*oa.Cr[i]*oa.vk_r + oa.vk_i'*oa.Cr[i]*oa.vk_i - 2*oa.vk_r'*oa.Ci[i]*oa.vk_i;
+        oa.b_kkt[end-3+i] = vk_r'*oa.Cr[i]*vk_r + vk_i'*oa.Cr[i]*vk_i - 2*vk_r'*oa.Ci[i]*vk_i;
     end
 
     sol = oa.A_kkt\oa.b_kkt;
@@ -249,16 +245,18 @@ function costFun(oa::ObjectAgent_DEP{T, U}, xk::Vector{T}) where {T<:Real,U<:Uns
 end
 
 function costFun!(oa::ObjectAgent_DEP)
+    vk_r = cos.(oa.xk);
+    vk_i = sin.(oa.xk);
     # This function is equivalent to the following lines of code:
     # for i in 1:3
-        # oa.fvk[i] = oa.vk_r'*oa.Cr[i]*oa.vk_r + oa.vk_i'*oa.Cr[i]*oa.vk_i - 2*oa.vk_r'*oa.Ci[i]*oa.vk_i - oa.Fdes[i];
+        # oa.fvk[i] = vk_r'*oa.Cr[i]*vk_r + vk_i'*oa.Cr[i]*vk_i - 2*vk_r'*oa.Ci[i]*vk_i - oa.Fdes[i];
     # end
 
-    mul!(oa.b_r, oa.Γ', oa.vk_r);
-    mul!(oa.b_i, oa.Γ', oa.vk_i);
+    mul!(oa.b_r, oa.Γ', vk_r);
+    mul!(oa.b_i, oa.Γ', vk_i);
     for k in 1:3
-        mul!(oa.a_r, oa.Λₐ[k]', oa.vk_r);
-        mul!(oa.a_i, oa.Λₐ[k]', oa.vk_i);
+        mul!(oa.a_r, oa.Λₐ[k]', vk_r);
+        mul!(oa.a_i, oa.Λₐ[k]', vk_i);
         oa.fvk[k] = 2*k_DEP*f_CM_R*dot(oa.a_r,oa.b_r) + 2*k_DEP*f_CM_R*dot(oa.a_i,oa.b_i) - 2*k_DEP*f_CM_I*(dot(oa.a_r,oa.b_i) - dot(oa.b_r,oa.a_i)) - oa.Fdes[k];
     end
 
@@ -268,17 +266,21 @@ end
 function jac!(oa::ObjectAgent_DEP)
     # This function is equivalent to the following lines of code:
     # for i in 1:3
-        # oa.J[:,i] .= 2*(dur*oa.Ci_red[i] - dui*oa.Cr_red[i])*oa.vk_r .+ 2*(dur*oa.Cr_red[i] .+ dui*oa.Ci_red[i])*oa.vk_i;
+        # oa.J[:,i] .= 2*(dur*oa.Ci_red[i] - dui*oa.Cr_red[i])*vk_r .+ 2*(dur*oa.Cr_red[i] .+ dui*oa.Ci_red[i])*vk_i;
     # end
 
     n = length(oa.act_used);
     m = length(oa.actList);
+
+    vk_r = cos.(oa.xk);
+    vk_i = sin.(oa.xk);
+
     @inbounds for k in 1:3
         for i in 1:n
             oa.J[i,k] = 0;
             @simd for j in 1:m
-                oa.J[i,k] += 2*(oa.vk_r[oa.act_used[i]]*oa.Ci_red[k][i,j] - oa.vk_i[oa.act_used[i]]*oa.Cr_red[k][i,j])*oa.vk_r[j];
-                oa.J[i,k] += 2*(oa.vk_r[oa.act_used[i]]*oa.Cr_red[k][i,j] + oa.vk_i[oa.act_used[i]]*oa.Ci_red[k][i,j])*oa.vk_i[j];
+                oa.J[i,k] += 2*(vk_r[oa.act_used[i]]*oa.Ci_red[k][i,j] - vk_i[oa.act_used[i]]*oa.Cr_red[k][i,j])*vk_r[j];
+                oa.J[i,k] += 2*(vk_r[oa.act_used[i]]*oa.Cr_red[k][i,j] + vk_i[oa.act_used[i]]*oa.Ci_red[k][i,j])*vk_i[j];
             end
         end
     end

@@ -1,7 +1,7 @@
 # ---------------------------- ACU -------------------------
 using SpecialFunctions
 
-export ObjectAgent_ACU, calcPressure, pressureField
+export ObjectAgent_ACU, calcPressure, pressureField, jac!
 
 const p_P0 = 5f0;     # transducers' constant [Pa.m]
 const p_f = 40000f0;  # emitted frequency
@@ -49,8 +49,6 @@ mutable struct ObjectAgent_ACU{T,U} <: ObjectAgent{T,U}
     zvec_redII::Array{T, 2};
     zvec_redIII::Array{T, 2};
     J::Matrix{T};
-    vk_r::Vector{T};
-    vk_i::Vector{T};
     lsd::LinSystemData{T};
     decDir::Vector{T};
     fvk::Vector{T};
@@ -91,8 +89,6 @@ mutable struct ObjectAgent_ACU{T,U} <: ObjectAgent{T,U}
         zvec_redII,
         zvec_redIII,
         zeros(T, length(act_used), 1), # J
-        zeros(T, n), # vk_r
-        zeros(T, n), # vk_r
         lsd,
         lsd.x_sol,
         zeros(T, 1), #fvk
@@ -104,15 +100,18 @@ mutable struct ObjectAgent_ACU{T,U} <: ObjectAgent{T,U}
 end
 
 function costFun!(oa::ObjectAgent_ACU)
-    n = length(oa.vk_r);
+    vk_r = cos.(oa.xk);
+    vk_i = sin.(oa.xk);
 
-    # oa.vk_r'*oa.zvec*oa.zvec'*oa.vk_r
+    n = length(vk_r);
+
+    # vk_r'*oa.zvec*oa.zvec'*vk_r
     oa.tmpb[1] = 0.0;
     oa.tmpb[2] = 0.0;
-    # tmpb = oa.zvec'*oa.vk_r
+    # tmpb = oa.zvec'*vk_r
     for i in 1:n
-        oa.tmpb[1] += oa.zvec[i,1]*oa.vk_r[i];
-        oa.tmpb[2] += oa.zvec[i,2]*oa.vk_r[i];
+        oa.tmpb[1] += oa.zvec[i,1]*vk_r[i];
+        oa.tmpb[2] += oa.zvec[i,2]*vk_r[i];
     end
 
     # tmpc = oa.zvec*tmpb
@@ -121,15 +120,15 @@ function costFun!(oa::ObjectAgent_ACU)
         oa.tmpc[i] += oa.zvec[i,2]*oa.tmpb[2];
     end
 
-    oa.fvk[1] = dot(oa.vk_r, oa.tmpc);
+    oa.fvk[1] = dot(vk_r, oa.tmpc);
 
-    # oa.vk_i'*oa.zvec*oa.zvec'*oa.vk_i
+    # vk_i'*oa.zvec*oa.zvec'*vk_i
     oa.tmpb[1] = 0.0;
     oa.tmpb[2] = 0.0;
-    # tmpb = oa.zvec'*oa.vk_i
+    # tmpb = oa.zvec'*vk_i
     for i in 1:n
-        oa.tmpb[1] += oa.zvec[i,1]*oa.vk_i[i];
-        oa.tmpb[2] += oa.zvec[i,2]*oa.vk_i[i];
+        oa.tmpb[1] += oa.zvec[i,1]*vk_i[i];
+        oa.tmpb[2] += oa.zvec[i,2]*vk_i[i];
     end
 
     # tmpc = oa.zvec*tmpb
@@ -138,9 +137,9 @@ function costFun!(oa::ObjectAgent_ACU)
         oa.tmpc[i] += oa.zvec[i,2]*oa.tmpb[2];
     end
 
-    oa.fvk[1] += dot(oa.vk_i, oa.tmpc);
+    oa.fvk[1] += dot(vk_i, oa.tmpc);
 
-    #oa.vk_r'*oa.zvec*[0 -2;2 0]*oa.zvec'*oa.vk_i
+    #vk_r'*oa.zvec*[0 -2;2 0]*oa.zvec'*vk_i
 
     # tmpc = oa.zvec*tmpb
     for i in 1:n
@@ -148,11 +147,11 @@ function costFun!(oa::ObjectAgent_ACU)
         oa.tmpc[i] += 2*oa.zvec[i,2]*oa.tmpb[1];
     end
 
-    oa.fvk[1] += dot(oa.vk_r, oa.tmpc);
+    oa.fvk[1] += dot(vk_r, oa.tmpc);
 
     oa.fvk[1] -= 1;
 
-    # oa.fvk[1] = oa.vk_r'*oa.zvec*oa.zvec'*oa.vk_r + oa.vk_i'*oa.zvec*oa.zvec'*oa.vk_i + oa.vk_r'*oa.zvec*[0 -2;2 0]*oa.zvec'*oa.vk_i - 1;
+    # oa.fvk[1] = vk_r'*oa.zvec*oa.zvec'*vk_r + vk_i'*oa.zvec*oa.zvec'*vk_i + vk_r'*oa.zvec*[0 -2;2 0]*oa.zvec'*vk_i - 1;
 
     nothing;
 end
@@ -164,45 +163,48 @@ function costFun(oa::ObjectAgent_ACU{T, U}, xk::Vector{T}) where {T<:Real,U<:Uns
 end
 
 function jac!(oa::ObjectAgent_ACU)
+    vk_r = cos.(oa.xk);
+    vk_i = sin.(oa.xk);
+
     # The lines bellew are equivalent to the following code:
-    # dui = Diagonal(oa.vk_i[oa.act_used]);
-    # dur = Diagonal(oa.vk_r[oa.act_used]);
-    # oa.J .= ( (-2*dui*oa.zvec_red  .+ dur*oa.zvec_redII)*(transpose(oa.zvec)*oa.vk_r) .+ (2*dur*oa.zvec_red .- dui*oa.zvec_redIII)*(transpose(oa.zvec)*oa.vk_i));
+    # dui = Diagonal(vk_i[oa.act_used]);
+    # dur = Diagonal(vk_r[oa.act_used]);
+    # oa.J .= ( (-2*dui*oa.zvec_red  .+ dur*oa.zvec_redII)*(transpose(oa.zvec)*vk_r) .+ (2*dur*oa.zvec_red .- dui*oa.zvec_redIII)*(transpose(oa.zvec)*vk_i));
 
     n = length(oa.J);
 
-    # Compute tmpA = -2*dui*oa.zvec_red  .+ dur*oa.zvec_redII = -2*Diagonal(oa.vk_i[oa.act_used])*oa.zvec_red + Diagonal(oa.vk_r[oa.act_used])*oa.zvec_redII
-    # and tmpb = transpose(oa.zvec)*oa.vk_r;
+    # Compute tmpA = -2*dui*oa.zvec_red  .+ dur*oa.zvec_redII = -2*Diagonal(vk_i[oa.act_used])*oa.zvec_red + Diagonal(vk_r[oa.act_used])*oa.zvec_redII
+    # and tmpb = transpose(oa.zvec)*vk_r;
     for i = 1:n
-        oa.tmpA[i,1] = -2*oa.vk_i[oa.act_used[i]]*oa.zvec_red[i,1];
-        oa.tmpA[i,1] +=   oa.vk_r[oa.act_used[i]]*oa.zvec_redII[i,1];
-        oa.tmpA[i,2] = -2*oa.vk_i[oa.act_used[i]]*oa.zvec_red[i,2];
-        oa.tmpA[i,2] +=   oa.vk_r[oa.act_used[i]]*oa.zvec_redII[i,2];
+        oa.tmpA[i,1] = -2*vk_i[oa.act_used[i]]*oa.zvec_red[i,1];
+        oa.tmpA[i,1] +=   vk_r[oa.act_used[i]]*oa.zvec_redII[i,1];
+        oa.tmpA[i,2] = -2*vk_i[oa.act_used[i]]*oa.zvec_red[i,2];
+        oa.tmpA[i,2] +=   vk_r[oa.act_used[i]]*oa.zvec_redII[i,2];
     end
 
     oa.tmpb[1] = 0.0;
     oa.tmpb[2] = 0.0;
-    for i in 1:length(oa.vk_r)
-        oa.tmpb[1]  += oa.zvec[i,1]*oa.vk_r[i];
-        oa.tmpb[2]  += oa.zvec[i,2]*oa.vk_r[i];
+    for i in 1:length(vk_r)
+        oa.tmpb[1]  += oa.zvec[i,1]*vk_r[i];
+        oa.tmpb[2]  += oa.zvec[i,2]*vk_r[i];
     end
 
     mul!(oa.J,  oa.tmpA, oa.tmpb);
 
     # Compute tmpA = 2*dur*oa.zvec_red .- dui*oa.zvec_redIII
-    # and tmpb = transpose(oa.zvec)*oa.vk_i;
+    # and tmpb = transpose(oa.zvec)*vk_i;
     for i = 1:n
-        oa.tmpA[i,1] = 2*oa.vk_r[oa.act_used[i]]*oa.zvec_red[i,1];
-        oa.tmpA[i,1] -= oa.vk_i[oa.act_used[i]]*oa.zvec_redIII[i,1]
-        oa.tmpA[i,2] = 2*oa.vk_r[oa.act_used[i]]*oa.zvec_red[i,2];
-        oa.tmpA[i,2] -= oa.vk_i[oa.act_used[i]]*oa.zvec_redIII[i,2]
+        oa.tmpA[i,1] = 2*vk_r[oa.act_used[i]]*oa.zvec_red[i,1];
+        oa.tmpA[i,1] -= vk_i[oa.act_used[i]]*oa.zvec_redIII[i,1]
+        oa.tmpA[i,2] = 2*vk_r[oa.act_used[i]]*oa.zvec_red[i,2];
+        oa.tmpA[i,2] -= vk_i[oa.act_used[i]]*oa.zvec_redIII[i,2]
     end
 
     oa.tmpb[1] = 0.0;
     oa.tmpb[2] = 0.0;
-    for i in 1:length(oa.vk_r)
-        oa.tmpb[1]  += oa.zvec[i,1]*oa.vk_i[i];
-        oa.tmpb[2]  += oa.zvec[i,2]*oa.vk_i[i];
+    for i in 1:length(vk_r)
+        oa.tmpb[1]  += oa.zvec[i,1]*vk_i[i];
+        oa.tmpb[2]  += oa.zvec[i,2]*vk_i[i];
     end
 
     for i = 1:n

@@ -33,14 +33,12 @@ export ObjectAgent, updatex!, updatex_dirFixed!, updateu!, broadcastx!,
     function updatex!(oa::ObjectAgent{T,U}, λ::T) where {T<:Real, U<:Unsigned}
         oa.xk .= oa.zk .- oa.uk;
 
-        oa.vk_r .= cos.(oa.xk);
-        oa.vk_i .= sin.(oa.xk);
-
         # Compute the jacobian
         jac!(oa);
 
         costFun!(oa); # update fvk,  < 20us
 
+        #lsd.xsol sits in the same spot in the memory as oa.decDit (they are the same)
         kernel_solve!(oa.lsd, oa.J, λ, oa.fvk);
 
         for i in 1:length(oa.act_used)

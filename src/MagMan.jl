@@ -1,4 +1,4 @@
-export ObjectAgent_MAG, calcMAGForce
+export ObjectAgent_MAG, calcMAGForce, jac!
 
 const Gxy_params = [1.6602e-09, 0.0166];
 
@@ -90,6 +90,10 @@ mutable struct ObjectAgent_MAG{T,U} <: ObjectAgent{T,U}
         kktb
         );
     end
+end
+
+function jac!(oa::ObjectAgent_MAG)
+    return nothing
 end
 
 function Gxyf( x, y )

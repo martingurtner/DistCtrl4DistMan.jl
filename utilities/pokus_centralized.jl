@@ -1,33 +1,30 @@
+using Revise
 using DistCtrl4DistMan: runExp
 using Plots
 
-# DEP_params = Dict{String,Any}("maxDist" => (550e-6, 550e-6));
+DEP_params = Dict{String,Any}("maxDist" => (550e-6, 550e-6));
 MAG_params = Dict{String,Any}("maxDist" => (75e-3, 75e-3));
-# ACU_params = Dict{String,Any}("maxDist" => (65e-3, 65e-3));
+ACU_params = Dict{String,Any}("maxDist" => (65e-3, 65e-3));
 
-## MAG - five steel balls, 8x8 array of coils
-params, exp_data = runExp(platform=:MAG, N_iter=25, N_agnts=5, N_acts=(8, 8), convanalysis=true, saveplots=false, params=MAG_params);
+## DEP - five steel balls, 8x8 array of coils
+params, exp_data = runExp(platform=:DEP, N_exps=10, N_iter=25, N_agnts=5, N_acts=(24, 24), convanalysis=true,
+                          plotConvergenceRates=true, saveplots=false, params=DEP_params);
 
-agnts = exp_data[1]["Agents"]
-aa = exp_data[1]["ActuatorArray"]
+## DEP - centralized
+params, exp_data = runExp(platform=:DEP, N_exps=10, algorithm=:centralized, N_iter=25, N_agnts=5, N_acts=(24, 24), convanalysis=true,
+                          plotConvergenceRates=false, saveplots=false, params=DEP_params,
+                          plotConvergenceRatesIndividual=false);
 
-## aseembling the actuators
-actuatorCommands = zeros(aa.nx, aa.ny);
+## MAG - distributed
+params, exp_data = runExp(platform=:MAG, algorithm=:admm, N_exps=10, N_iter=10, N_agnts=10, N_acts=(16, 16), convanalysis=true,
+                          plotConvergenceRates=false, saveplots=false, params=MAG_params,
+                          plotConvergenceRatesIndividual=false, errstats=false);
 
-for a in agnts
-    for (i, act) in enumerate(a.actList)
-        actuatorCommands[act[1], act[2]] = a.xk[i]
-    end
-end
+## MAG - centralized
+params, exp_data = runExp(platform=:MAG, algorithm=:centralized, N_exps=10, N_iter=10, N_agnts=10, N_acts=(16, 16), convanalysis=true,
+                          plotConvergenceRates=false, saveplots=false, params=MAG_params,
+                          plotConvergenceRatesIndividual=false, errstats=false);
 
+##
 
-## aseembling the jacobian
-F_dim = params["force_dim"]
-J = zeros(aa.nx*aa.ny, length(agnts)*F_dim);
-
-for (k, a) in enumerate(agnts)
-    for (i, act) in enumerate(a.actList)
-        J[act[1] + (act[2]-1)*aa.ny, (F_dim*(k-1)+1):(F_dim*k)] = a.J[i,:]
-    end
-end
-
+# centralized_solution(agnts, aa, λ = 1.0, maxiter = 10, verbose = true);

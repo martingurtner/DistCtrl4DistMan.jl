@@ -23,11 +23,11 @@ end
 function iterate(it::ADMMIterable{<:Real}, iteration::Int=0)
     if iteration >= it.maxiter return nothing end
 
-    for (k, agent) in enumerate(it.agents)
+    Threads.@threads for k = 1:length(it.agents)
         if it.method == :freedir
-            updatex!(agent, it.λ);
+            updatex!(it.agents[k], it.λ);
         else
-            updatex_dirFixed!(agent, it.λ);
+            updatex_dirFixed!(it.agents[k], it.λ);
         end
     end
     for agent in it.agents
@@ -54,7 +54,7 @@ function admm(agents::Array{<:ObjectAgent, 1};
 
     admm_it = ADMMIterable(λ, ρ, agents, method, maxiter);
 
-    for (iteration, item) = enumerate(admm_it)
+    elapsed = @elapsed for (iteration, item) = enumerate(admm_it)
         if log
             push!(history, agents);
         end
@@ -64,7 +64,7 @@ function admm(agents::Array{<:ObjectAgent, 1};
         end
     end
 
-    log ? history : nothing
+    log ? (elapsed, history) : (elapsed, nothing)
 end
 
 end

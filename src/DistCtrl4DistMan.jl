@@ -11,6 +11,7 @@ include("ConvAnalysisModule.jl")
 include("ADMMModule.jl")
 include("PlottingModule.jl")
 include("SimulationModule.jl")
+include("CentralizedSolutionModule.jl")
 
 using LinearAlgebra
 using Statistics
@@ -24,6 +25,7 @@ using .ADMMModule
 using .ConvAnalysisModule
 using .PlottingModule
 using .SimulationModule
+using .CentralizedSolutionModule
 
 """
     genRandomPositions(N, params, xlim, ylim, minMutualDist)
@@ -93,42 +95,75 @@ a list of actuators it optimizes over. These lists are created based on agent's
 position and values in `params["maxDist"]``. If `Fdes` argument is missing, the
 desired force is generated randomly.
 """
-function initAgents(aa::ActuatorArray{T, U}, oa_pos::Union{Array{Tuple{T,T},1}, Array{Tuple{T,T,T}, 1}}, params::Dict{String,Any}; Fdes = missing) where {T<:Real, U<:Unsigned}
+function initAgents(
+    aa::ActuatorArray{T, U},
+    oa_pos::Union{Array{Tuple{T,T},1}, Array{Tuple{T,T,T}, 1}},
+    params::Dict{String,Any};
+    algorithm = :admm,
+    Fdes = missing
+    ) where {T<:Real, U<:Unsigned}
+    
     N = size(oa_pos)[1];
+    
+    # Initialize agent actuator lists
+    act_considered = []
+    act_optimized = []
+    for k in 1:N
+        if params["platform"] == :DEP || params["platform"] == :ACU 
+            aL, a_used = genActList(aa, oa_pos[k], params["maxDist"][1], params["maxDist"][2]);
+        elseif params["platform"] == :MAG
+            aL, a_used = genActList(aa, (oa_pos[k][1], oa_pos[k][2], T(0)), params["maxDist"][1], params["maxDist"][2]);
+        else
+            error("Unsupported platform")
+        end
+
+        push!(act_considered, aL)
+        push!(act_optimized, a_used)
+    end
+
+    if algorithm == :centralized
+        actuators_union = Set()
+        for k in 1:N 
+            union!(actuators_union, Set(act_considered[k]))
+        end
+
+        act_union = Array{Tuple{U,U},1}()
+        for a in actuators_union
+            push!(act_union, a)
+        end
+        
+        for k in 1:N
+            act_considered[k] = act_union
+            act_optimized[k] = collect(U, range(1,length=length(act_union)))
+        end
+    end
 
     if params["platform"] == :DEP
         agents = Array{ObjectAgent_DEP{T, U}, 1}();
         randActuatorCommands = 2*π*rand(T, aa.nx, aa.ny);
         for k in 1:N
-            # Generate list of used actuators for each object agent
-            aL, a_used = genActList(aa, oa_pos[k], params["maxDist"][1], params["maxDist"][2]);
             if ismissing(Fdes)
                 Fdes_i = calcDEPForce(aa, oa_pos[k], randActuatorCommands).*(1/2,1/2,1/2);
             else
                 Fdes_i = Fdes[k];
             end
-            push!(agents, ObjectAgent_DEP("Agent $k", oa_pos[k], (Fdes_i[1], Fdes_i[2], Fdes_i[3]), aa, aL, a_used));
+            push!(agents, ObjectAgent_DEP("Agent $k", oa_pos[k], (Fdes_i[1], Fdes_i[2], Fdes_i[3]), aa, act_considered[k], act_optimized[k]));
         end
     elseif params["platform"] == :MAG
         agents = Array{ObjectAgent_MAG{T, U}, 1}();
         randActuatorCommands = rand(T, aa.nx, aa.ny);
         for k in 1:N
-            # Generate list of used actuators for each object agent
-            aL, a_used = genActList(aa, (oa_pos[k][1], oa_pos[k][2], T(0)), params["maxDist"][1], params["maxDist"][2]);
             if ismissing(Fdes)
                 Fdes_i = calcMAGForce(aa, oa_pos[k], randActuatorCommands)./2;
             else
                 Fdes_i = Fdes[k];
             end
-            push!(agents, ObjectAgent_MAG("Agent $k", oa_pos[k], (Fdes_i[1], Fdes_i[2]), aa, aL, a_used, params["λ"]));
+            push!(agents, ObjectAgent_MAG("Agent $k", oa_pos[k], (Fdes_i[1], Fdes_i[2]), aa, act_considered[k], act_optimized[k], params["λ"]));
         end
     elseif params["platform"] == :ACU
         agents = Array{ObjectAgent_ACU{T, U}, 1}();
         for k in 1:N
-            # Generate list of used actuators for each object agent
-            aL, a_used = genActList(aa, oa_pos[k], params["maxDist"][1], params["maxDist"][2]);
-
-            push!(agents, ObjectAgent_ACU("Agent $k", oa_pos[k], params["Pdes"], aa, aL, a_used));
+            push!(agents, ObjectAgent_ACU("Agent $k", oa_pos[k], params["Pdes"], aa, act_considered[k], act_optimized[k]));
         end
     else
         error("Unsupported platform")
@@ -349,6 +384,7 @@ Run a numerical experiment testing the distributed optimization solver.
 - `N_acts::Tuple{Int,Int}=(8,8)`: the actuator array used in experiments is a `N_acts`by``N_acts matrix of actuators
 - `N_agnts::Int=4`: number of agents (i.e. manipulated objects)
 - `method::Symbol=:freedir`: decides the variant of the optimization problem. Either `:freedir` for minimizing the norm of the difference between the desired and developed force or `:fixdir` for generating the desired direction and minimizing the difference in the magnitude of the developed and desired force.
+- `algorithm::Symbol=:admm`: chooses the centralized (:centralized) or distributed (:admm) optimization algorithm.
 - `showplots::Bool=true`: plot the results of the numerical experiments
 - `plotActuatorCommands::Bool=false`: plot the results of the numerical experiments
 - `plotNeighbtCircles::Bool=false`: encircle the used actuators by each agent
@@ -372,6 +408,7 @@ function runExp(;platform=:MAG,
     N_acts=(8,8),
     N_iter=50, N_exps = 1, N_agnts = 4,
     method = :freedir,
+    algorithm = :admm,
     showplots = true,
     plotActuatorCommands = false,
     plotNeighbtCircles = false,
@@ -440,24 +477,38 @@ function runExp(;platform=:MAG,
         end
 
         # Initialize the agents
-        agents = initAgents(aa, agnts_pos, params, Fdes = Fdes);
+        agents = initAgents(aa, agnts_pos, params, algorithm = algorithm, Fdes = Fdes);
 
         exps_data_i = Dict{String, Any}("Agents" => agents, "ActuatorArray" => aa, "Platform" => platform, "params" => params);
         convanalysis && push!(exps_data, exps_data_i);
         convanalysis && push!(exps_data_i, "conv_data" => ConvAnalysis_Data());
 
-        t_elapsed[i] = @elapsed begin
-            resolveNeighbrRelations!(agents);
+        t_elapsed[i] = 0
+        if algorithm == :admm
+            t_elapsed[i] += @elapsed resolveNeighbrRelations!(agents);
 
-            hist = admm(agents,
+            elapsed, hist = admm(agents,
                 λ = params["λ"], ρ = params["ρ"],
                 log = convanalysis,
                 maxiter = N_iter,
                 method = method);
 
-            # Average the actuator commands over the agents
-            actuatorCommands = averageActuatorCommands(agents, aa);
+            t_elapsed[i] += elapsed
+        elseif algorithm == :centralized
+            actuatorCommands, t_elapsed[i], hist = centralized_solution(
+                agents,
+                aa,
+                λ = params["λ"],
+                log = convanalysis,
+                maxiter = N_iter);
+
+                # actuatorCommands = copy(transpose(reshape(actuatorCommands, (aa.nx, aa.ny))))
+        else
+            error("Only :admm or :centralized algorithms are supported.")
         end
+
+        # Average the actuator commands over the agents
+        actuatorCommands = averageActuatorCommands(agents, aa);
 
         convanalysis && push!(exps_data_i, "conv_data" => hist);
         (convanalysis || showplots || saveplots) && push!(exps_data_i, "ActuatorCommands" => actuatorCommands);
