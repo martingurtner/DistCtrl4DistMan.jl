@@ -99,51 +99,44 @@ function initAgents(
     aa::ActuatorArray{T, U},
     oa_pos::Union{Array{Tuple{T,T},1}, Array{Tuple{T,T,T}, 1}},
     params::Dict{String,Any};
-    algorithm = :admm,
-    Fdes = missing
-    ) where {T<:Real, U<:Unsigned}
-    
+    algorithm=:admm,
+    Fdes = missing) where {T<:Real, U<:Unsigned}
+
     N = size(oa_pos)[1];
-    
-    # Initialize agent actuator lists
-    for k in 1:N
-        if params["platform"] == :DEP || params["platform"] == :MAG 
-            aL, a_used = genActList(aa, oa_pos[k], params["maxDist"][1], params["maxDist"][2]);
-        elseif params["platform"] == :MAG
-            aL, a_used = genActList(aa, (oa_pos[k][1], oa_pos[k][2], T(0)), params["maxDist"][1], params["maxDist"][2]);
-        else
-            error("Unsupported platform")
-        end
-        push!(act_considered, aL)
-        push!(act_optimized, a_used)
-    end
 
     if params["platform"] == :DEP
         agents = Array{ObjectAgent_DEP{T, U}, 1}();
         randActuatorCommands = 2*π*rand(T, aa.nx, aa.ny);
         for k in 1:N
+            # Generate list of used actuators for each object agent
+            aL, a_used = genActList(aa, oa_pos[k], params["maxDist"][1], params["maxDist"][2]);
             if ismissing(Fdes)
                 Fdes_i = calcDEPForce(aa, oa_pos[k], randActuatorCommands).*(1/2,1/2,1/2);
             else
                 Fdes_i = Fdes[k];
             end
-            push!(agents, ObjectAgent_DEP("Agent $k", oa_pos[k], (Fdes_i[1], Fdes_i[2], Fdes_i[3]), aa, act_considered[k], act_optimized[k]));
+            push!(agents, ObjectAgent_DEP("Agent $k", oa_pos[k], (Fdes_i[1], Fdes_i[2], Fdes_i[3]), aa, aL, a_used));
         end
     elseif params["platform"] == :MAG
         agents = Array{ObjectAgent_MAG{T, U}, 1}();
         randActuatorCommands = rand(T, aa.nx, aa.ny);
         for k in 1:N
+            # Generate list of used actuators for each object agent
+            aL, a_used = genActList(aa, (oa_pos[k][1], oa_pos[k][2], T(0)), params["maxDist"][1], params["maxDist"][2]);
             if ismissing(Fdes)
                 Fdes_i = calcMAGForce(aa, oa_pos[k], randActuatorCommands)./2;
             else
                 Fdes_i = Fdes[k];
             end
-            push!(agents, ObjectAgent_MAG("Agent $k", oa_pos[k], (Fdes_i[1], Fdes_i[2]), aa, act_considered[k], act_optimized[k], params["λ"]));
+            push!(agents, ObjectAgent_MAG("Agent $k", oa_pos[k], (Fdes_i[1], Fdes_i[2]), aa, aL, a_used, params["λ"]));
         end
     elseif params["platform"] == :ACU
         agents = Array{ObjectAgent_ACU{T, U}, 1}();
         for k in 1:N
-            push!(agents, ObjectAgent_ACU("Agent $k", oa_pos[k], params["Pdes"], aa, act_considered[k], act_optimized[k]));
+            # Generate list of used actuators for each object agent
+            aL, a_used = genActList(aa, oa_pos[k], params["maxDist"][1], params["maxDist"][2]);
+
+            push!(agents, ObjectAgent_ACU("Agent $k", oa_pos[k], params["Pdes"], aa, aL, a_used));
         end
     else
         error("Unsupported platform")
