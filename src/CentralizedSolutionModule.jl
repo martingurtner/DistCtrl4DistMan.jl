@@ -58,7 +58,6 @@ function iterate(it::CentralizedSolutionIterable{<:Real}, iteration::Int=0)
 
     # Construct the jacobian and fvk
     ind_i = 0
-    in_j = 0
     for (k, a) in enumerate(it.agents)
         # Jacobian
         for (i, act) in enumerate(a.actList)
@@ -99,7 +98,8 @@ function centralized_solution(
     λ::T=1.0,
     log::Bool = false,
     verbose::Bool = false,
-    maxiter::Int = 25
+    maxiter::Int = 25,
+    stoping_criteria = x -> false,
     ) where T<:Real
 
     if log
@@ -115,6 +115,10 @@ function centralized_solution(
 
         if verbose
             verbose && @printf("%3d\n", iteration)
+        end
+        
+        if iteration > 1 && stoping_criteria(history)
+            break;
         end
     end
 

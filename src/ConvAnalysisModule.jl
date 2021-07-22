@@ -62,11 +62,12 @@ function errf(cad::ConvAnalysis_Data)
 end
 
 function errf_sum(cad::ConvAnalysis_Data)
-    return [sum([cad[i][k].cost for k in 1:numOfAgents(cad)]) for i in 1:numOfIterations(cad)]
+    """Returns average cost (F_des - f_model(x))ˆ2"""
+    return [sum([cad[i][k].cost for k in 1:numOfAgents(cad)]) / numOfAgents(cad) for i in 1:numOfIterations(cad)]
 end
 
 function conv_measure(cad::ConvAnalysis_Data)
-    return [ sqrt(sum( [ norm(cad[i][k].zk - cad[i-1][k].zk)^2 + norm(cad[i][k].uk - cad[i-1][k].uk)^2 for k in 1:numOfAgents(cad)] )) for i in 2:numOfIterations(cad)]
+    return [ sqrt(sum( [ norm(cad[i][k].zk - cad[i-1][k].zk)^2 + norm(cad[i][k].uk - cad[i-1][k].uk)^2 for k in 1:numOfAgents(cad)] ) / numOfAgents(cad)) for i in 2:numOfIterations(cad)]
 end
 
 end

@@ -19,9 +19,10 @@ export ObjectAgent, updatex!, updatex_dirFixed!, updateu!, broadcastx!,
     abstract type ObjectAgent{T<:Real,U<:Unsigned} end
 
     function resolveNeighbrRelations!(agents::Array{OA, 1}) where {OA<:ObjectAgent}
-        for (k, ak) in enumerate(agents)
+        Threads.@threads for k in 1:length(agents)
             for l in (k+1):length(agents)
                 al = agents[l]
+                ak = agents[k]
                 il1, il2 = actuatorsInCommon(ak.actList, al.actList)
 
                 push!(ak.neighbors, (al, il1, il2));

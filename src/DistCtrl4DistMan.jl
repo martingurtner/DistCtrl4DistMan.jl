@@ -395,7 +395,8 @@ function runExp(;platform=:MAG,
     agent_positions = missing,
     Fdes = missing,
     ignore_list = Array{Tuple{Int64, Int64},1}(),
-    params = Dict{String, Any}())
+    params = Dict{String, Any}(),
+    stopping_value = Inf)
 
     # Used number types
     F = Float64;  # Doesnt work with FLoat32
@@ -436,6 +437,14 @@ function runExp(;platform=:MAG,
 
     exps_data = Any[];
 
+    # Stopping criteria
+    if stopping_value != Inf
+        # stopping_criteria = history -> (last(conv_measure(history)) < stopping_value)
+        stopping_criteria = history -> (last(errf_sum(history)) < stopping_value)
+    else
+        stopping_criteria = history -> false
+    end
+
     for i in 1:N_exps
         display==:iter && @printf("------ %s - %s - Experiment #%d, λ: %f, ρ: %f ------\n", platform, method, i, params["λ"], params["ρ"])
 
@@ -458,13 +467,18 @@ function runExp(;platform=:MAG,
 
         t_elapsed[i] = 0
         if algorithm == :admm
-            t_elapsed[i] += @elapsed resolveNeighbrRelations!(agents);
+            elapsed = @elapsed resolveNeighbrRelations!(agents);
+            # @printf("resolveNeighbrRelations: %3.2f ms.\n", 1e3*elapsed)
+
+            t_elapsed[i] += elapsed
 
             elapsed, hist = admm(agents,
                 λ = params["λ"], ρ = params["ρ"],
                 log = convanalysis,
                 maxiter = N_iter,
-                method = method);
+                method = method,
+                stoping_criteria = stopping_criteria
+                );
 
             t_elapsed[i] += elapsed
         elseif algorithm == :centralized
@@ -473,7 +487,9 @@ function runExp(;platform=:MAG,
                 aa,
                 λ = params["λ"],
                 log = convanalysis,
-                maxiter = N_iter);
+                maxiter = N_iter,
+                stoping_criteria = stopping_criteria
+                );
 
                 # actuatorCommands = copy(transpose(reshape(actuatorCommands, (aa.nx, aa.ny))))
         else
@@ -503,7 +519,7 @@ function runExp(;platform=:MAG,
         savefig("TestConv_all.pdf")
     end
 
-    convanalysis ? (params, exps_data) : (params);
+    convanalysis ? (params, exps_data, t_elapsed) : (params);
 end
 
 end
