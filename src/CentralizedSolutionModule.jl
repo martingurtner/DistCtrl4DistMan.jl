@@ -84,6 +84,13 @@ function iterate(it::CentralizedSolutionIterable{<:Real}, iteration::Int=0)
     for (k, a) in enumerate(it.agents)
         for (i, act) in enumerate(a.actList)
             ind_i = act[2] + (act[1]-1)*it.aa.nx
+            
+            # The sautarion is applied to the same actuator repeatedly for each agent.
+            # This is due to the fact that the satuartion limits are stored within the
+            # agent objects and thus there is pretty much no other way than applying the
+            # saturaion for each actuator considered by each agent.
+            it.xk[ind_i] = saturate_control_action(a, it.xk[ind_i])
+
             a.xk[i] = it.xk[ind_i]
             a.zk[i] = it.xk[ind_i]
         end

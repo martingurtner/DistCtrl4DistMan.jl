@@ -412,7 +412,7 @@ function runExp(;platform=:MAG,
         xlim = (2*aa.dx, (aa.nx-3)*aa.dx);
         ylim = (2*aa.dx, (aa.ny-3)*aa.dx);
 
-        minMutualDist = 2*aa.dx;   # Set the minimum mutual distance between the agents
+        minMutualDist = 1.5*aa.dx;   # Set the minimum mutual distance between the agents
     elseif platform == :MAG
         params = merge(MAG_params, params);
 
@@ -421,7 +421,7 @@ function runExp(;platform=:MAG,
         xlim = (aa.dx, (aa.nx-2)*aa.dx);
         ylim = (aa.dx, (aa.ny-2)*aa.dx);
 
-        minMutualDist = 2*aa.dx;   # Set the minimum mutual distance between the agents
+        minMutualDist = 1.2*aa.dx;   # Set the minimum mutual distance between the agents
     elseif platform == :ACU
         params = merge(ACU_params, params);
 

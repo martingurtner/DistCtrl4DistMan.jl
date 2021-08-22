@@ -179,17 +179,11 @@ function updatex!(oa::ObjectAgent_MAG{T,U}, λ::T) where {T<:Real, U<:Unsigned}
     nothing;
 end
 
-function updateu!(oa::ObjectAgent_MAG, ρ::Real)
-    for i in 1:length(oa.xk)
-        xbari = (oa.xk[i] + oa.rcvBuffer_x[i])/(oa.rcvBuffer_N[i]+1);
-        ubari = (oa.uk[i] + oa.rcvBuffer_u[i])/(oa.rcvBuffer_N[i]+1);
-        oa.zk[i] = min(max(xbari + ubari, 0), 1);
-        oa.uk[i] += ρ*(oa.xk[i] - oa.zk[i]);
-
-        oa.rcvBuffer_x[i] = 0;
-        oa.rcvBuffer_u[i] = 0;
-        oa.rcvBuffer_N[i] = 0;
-    end
+function saturate_control_action(oa::ObjectAgent_MAG{T,U}, x::T) where {T<:Real, U<:Unsigned}
+    """
+    This method is used to saturate the control aciton.
+    """
+    min(max(x, 0), 1)
 end
 
 function costFun!(oa::ObjectAgent_MAG)

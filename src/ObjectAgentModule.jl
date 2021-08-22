@@ -14,7 +14,7 @@ using .SquaredMatrixPlusIModule
 using LinearAlgebra
 
 export ObjectAgent, updatex!, updatex_dirFixed!, updateu!, broadcastx!,
-    actuatorsInCommon, resolveNeighbrRelations!, costFun, costFun!
+    actuatorsInCommon, resolveNeighbrRelations!, costFun, costFun!, saturate_control_action
 
     abstract type ObjectAgent{T<:Real,U<:Unsigned} end
 
@@ -68,6 +68,14 @@ export ObjectAgent, updatex!, updatex_dirFixed!, updateu!, broadcastx!,
         nothing;
     end
 
+    function saturate_control_action(oa::ObjectAgent{T,U}, x::T) where {T<:Real, U<:Unsigned}
+        """
+        This method is used to saturate the control aciton. This default implementation
+        assumes that there are no saturations.
+        """
+        x
+    end
+
     function broadcastx!(oa::ObjectAgent)
         for (neighbor, il1, il2) in oa.neighbors
             receivex!(neighbor, oa.xk, oa.uk, il1, il2);
@@ -86,7 +94,7 @@ export ObjectAgent, updatex!, updatex_dirFixed!, updateu!, broadcastx!,
         for i in 1:length(oa.xk)
             xbari = (oa.xk[i] + oa.rcvBuffer_x[i])/(oa.rcvBuffer_N[i]+1);
             ubari = (oa.uk[i] + oa.rcvBuffer_u[i])/(oa.rcvBuffer_N[i]+1);
-            oa.zk[i] = xbari + ubari;
+            oa.zk[i] = saturate_control_action(oa, xbari + ubari);
             oa.uk[i] += ρ*(oa.xk[i] - oa.zk[i]);
 
             oa.rcvBuffer_x[i] = 0;
