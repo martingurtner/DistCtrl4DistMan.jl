@@ -14,7 +14,7 @@ julia> runExp(platform=:MAG, N_agnts=4, N_acts=(8, 8));
 ```
 
 ## Images and animations accompanying the paper
-You can generate the images in the paper and animations used in the accompanying [video](https://youtu.be/Eus7uAvBtgU) by running the scripts in the `utilities/` folder.
+You can generate the images in the paper and animations used in the accompanying [video](https://youtu.be/P6HzgRZ4wuA) by running the scripts in the `utilities/` folder.
 | Magnetophoresis  | Dielectrophoresis |
 | ------------- | ------------- |
 | <img src="docs/simul_MAG.gif" align="center" />  | <img src="docs/simul_DEP.gif" align="center" />  |
