@@ -51,7 +51,7 @@ function genRandomPositions(N, params, xlim, ylim, minMutualDist)
     F = typeof(minMutualDist);
     oa_pos = NTuple{params["space_dim"], F}[];
 
-    N_attempts = 500;
+    N_attempts = 5000;
     for l in 1:N_attempts
         # Generate a random position for kth agent
         xrand = (xlim[2] - xlim[1])*rand(F) + xlim[1];
@@ -421,7 +421,7 @@ function runExp(;platform=:MAG,
         xlim = (aa.dx, (aa.nx-2)*aa.dx);
         ylim = (aa.dx, (aa.ny-2)*aa.dx);
 
-        minMutualDist = 1.2*aa.dx;   # Set the minimum mutual distance between the agents
+        minMutualDist = 1.1*aa.dx;   # Set the minimum mutual distance between the agents
     elseif platform == :ACU
         params = merge(ACU_params, params);
 
@@ -508,7 +508,7 @@ function runExp(;platform=:MAG,
         display==:iter && @printf("Time elapsed: %3.2f ms.\n", 1e3*t_elapsed[i])
     end
 
-    (display==:iter || display==:final) && @printf("%s - %s - λ: %f, ρ: %f - Time elapsed - mean: %3.2f ms, meadian: %3.2f ms.\n", platform, method, params["λ"], params["ρ"], 1e3*mean(t_elapsed), 1e3*median(t_elapsed));
+    (display==:iter || display==:final) && @printf("%s - %s - λ: %f, ρ: %f - Time elapsed - mean: %3.2f ms, meadian: %3.2f ms, std: %3.2f ms.\n", platform, method, params["λ"], params["ρ"], 1e3*mean(t_elapsed), 1e3*median(t_elapsed), 1e3*std(t_elapsed));
 
     if plotConvergenceRates && convanalysis
         Plots.display(plot([conv_measure(exps_datak["conv_data"]) for exps_datak in exps_data], legend=nothing, linecolor=:red, linealpha=0.3,
